@@ -32,7 +32,7 @@ double WaveNum;           // wavenumber of incident light
 double * restrict DipoleCoord;      // vector to hold the coordinates of the dipoles
 double *restrict plSec; //vector to hold the coefficients determining the plane
 doublecomplex * restrict refind;    // stores (effective) refractive index of each dipole
-doublecomplex * restrict cc_sqrt;   // sqrt of couple constants (for each dipole)
+doublecomplex * restrict sqrtCC;   // sqrt of couple constants (for each dipole, used in WD)
 double memory;            // total memory usage in bytes
 double memPeak;           // peak memory usage in bytes
 enum inter IntRelation;   // type of formula for interaction term
@@ -64,7 +64,8 @@ bool ipr_required;  /* whether inner product in MatVec will be used by iterative
                        initialization, e.g., for OpenCL) */
 double propAlongZ;  // equal 0 for general incidence, and +-1 for incidence along the z-axis (can be used as flag)
 bool rectDip;       // whether using rectangular-cuboid (non-cubical) dipoles
-bool use_wd;
+bool use_wd; //whether using weighted discretization
+bool print_wd; //whether print WD quantities
 
 // 3D vectors (in particle reference frame)
 double prop_0[3],prop[3];     // incident direction (in laboratory and particle reference frame)
@@ -75,14 +76,15 @@ double box_origin_unif[3];    /* coordinates of the center of the first dipole i
 
 // file info
 const char * restrict directory; // directory to save data in
+FILE * restrict voxel_wd;        // file where all WD quantities are stored for each voxel
 FILE * restrict logfile;         // file where all the information about the run is saved
 int term_width;                  // width of the terminal to which ADDA produces output
 
-// refractive index
+// refractive index and couple constants
 int Nmat;  // number of different domains (for each either scalar or tensor refractive index is specified
 int Ncomp; // number of components of each refractive index (1 or 3)
 doublecomplex ref_index[MAX_NMAT];  // a set of refractive indexes
-//doublecomplex cc_sqrt[MAX_NMAT][3]; // sqrt of couple constants
+doublecomplex cc_sqrt[MAX_NMAT][3]; // sqrt of couple constants (per material, used in TD)
 doublecomplex chi_inv[MAX_NMAT][3]; // normalized inverse susceptibility: = 1/(V*chi)
 unsigned char * restrict material;  // material: index for cc
 

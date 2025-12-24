@@ -36,9 +36,8 @@ extern doublecomplex * restrict arg_full;
 // defined and initialized in fft.c
 extern const doublecomplex * restrict Dmatrix,* restrict Rmatrix;
 extern doublecomplex * restrict Xmatrix,* restrict slices,* restrict slices_tr,* restrict slicesR,* restrict slicesR_tr;
-extern const size_t DsizeY,DsizeZ;
+extern const size_t DsizeY,DsizeZ,RsizeY;
 #endif // !SPARSE
-extern const size_t RsizeY;
 // defined and initialized in timing.c
 extern size_t TotalMatVec;
 
@@ -143,7 +142,7 @@ void MatVec (doublecomplex * restrict argvec,    // the argument vector
 	size_t i;
 	doublecomplex fmat[6],xv[3],yv[3],xvR[3],yvR[3];
 	size_t index,y,z,Xcomp;
-//	unsigned char mat;
+	unsigned char mat;
 #ifdef PRECISE_TIMING
 	SYSTEM_TIME tvp[18];
 	SYSTEM_TIME Timing_FFTXf,Timing_FFTYf,Timing_FFTZf,Timing_FFTXb,Timing_FFTYb,Timing_FFTZb,Timing_Mult1,Timing_Mult2,
@@ -204,23 +203,21 @@ void MatVec (doublecomplex * restrict argvec,    // the argument vector
 	for (i=0;i<local_nvoid_Ndip;i++) {
 		// fill grid with argvec*sqrt_cc
 		j=3*i;
-	//	mat=material[i];
+		mat=material[i];
 		index=IndexXmatrix(position[j],position[j+1],position[j+2]);
-		// Xmat=cc_sqrt*argvec
+		/*Xmat stores components of β'x for all the voxels as Xmat[i][j]=(βi'xi)[j] : A=I+S.D.Xmat*/
 		if (use_wd){
-			if (volfrac[i]<1) {
-				doublecomplex plane[9];
-				doublecomplex matrix[3][3], matrixT[3][3];
-				for (int ii = 0; ii<9; ii++) plane[ii] = cc_sqrt[9*i + ii];
-				MatrPlainTo3x3(plane, matrix);
-				MatrTranspose(matrixT, matrix);
-				doublecomplex result[3];
-				MatrVecMul(3,matrix,argvec+j,result);
-				for (Xcomp=0;Xcomp<3;Xcomp++) Xmatrix[index+Xcomp*local_Nsmall]=result[Xcomp];
-			}
-			else for (Xcomp=0;Xcomp<3;Xcomp++) Xmatrix[index+Xcomp*local_Nsmall]=cc_sqrt[9*i]*argvec[j+Xcomp];
+			doublecomplex matrix[3][3], matrixT[3][3];
+			doublecomplex result[3];
+			MatrSet(matrix,0);
+			if(volfrac[i]<1.0) for (int k=0; k<3; k++) for (int l=0; l<3; l++) matrix[k][l]=sqrtCC[9*i+k+3*l];
+			else if(anisotropy) for (int l=0; l<3; l++) matrix[l][l]=sqrtCC[9*i+4*l];
+			else for (int l=0; l<3; l++) matrix[l][l]=sqrtCC[9*i];
+			MatrTrans(matrixT, matrix);
+			MatrVecMul(3,matrixT,argvec+j,result); //β'x
+			for (Xcomp=0;Xcomp<3;Xcomp++) Xmatrix[index+Xcomp*local_Nsmall]=result[Xcomp];
 		}
-		else for (Xcomp=0;Xcomp<3;Xcomp++) Xmatrix[index+Xcomp*local_Nsmall]=cc_sqrt[i]*argvec[j+Xcomp];
+		else for (Xcomp=0;Xcomp<3;Xcomp++) Xmatrix[index+Xcomp*local_Nsmall]=cc_sqrt[mat][Xcomp]*argvec[j+Xcomp];
 	}
 #ifdef PRECISE_TIMING
 	GET_SYSTEM_TIME(tvp+1);
@@ -363,24 +360,21 @@ void MatVec (doublecomplex * restrict argvec,    // the argument vector
 	// fill resultvec
 	for (i=0;i<local_nvoid_Ndip;i++) {
 		j=3*i;
-	//	mat=material[i];
+		mat=material[i];
 		index=IndexXmatrix(position[j],position[j+1],position[j+2]);
+		/*Direct and inverse FFTs have been done as Ymat=F{D}*F{Xmat}->F{Xmat}, Xmat->D.Xmat=D.(S.x) : Ax = x + S.Xmat*/
 		if (use_wd){
-			if (volfrac[i]<1) {
-				doublecomplex plane[9];
-				doublecomplex matrix[3][3], matrixT[3][3];
-				for (int ii = 0; ii<9; ii++) plane[ii] = cc_sqrt[9*i + ii];
-				MatrPlainTo3x3(plane, matrix);
-				MatrTranspose(matrixT,matrix);
-				doublecomplex result[3];
-				doublecomplex vec[3];
-				vec[0] = Xmatrix[index]; vec[1] = Xmatrix[index + local_Nsmall]; vec[2] = Xmatrix[index + 2*local_Nsmall];
-				MatrVecMul(3,matrixT,vec,result);
-				for (Xcomp=0;Xcomp<3;Xcomp++) resultvec[j+Xcomp]=argvec[j+Xcomp]+result[Xcomp];
-			}
-			else for (Xcomp=0;Xcomp<3;Xcomp++) resultvec[j+Xcomp]=argvec[j+Xcomp]+cc_sqrt[9*i]*Xmatrix[index+Xcomp*local_Nsmall];
+			doublecomplex matrix[3][3], matrixT[3][3];
+			doublecomplex result[3],vec[3];
+			MatrSet(matrix,0);
+			if(volfrac[i]<1.0) for (int k=0; k<3; k++) for (int l=0; l<3; l++) matrix[k][l]=sqrtCC[9*i+k+3*l];
+			else if(anisotropy) for (int l=0; l<3; l++) matrix[l][l]=sqrtCC[9*i+4*l];
+			else for (int l=0; l<3; l++) matrix[l][l]=sqrtCC[9*i];
+			for (Xcomp=0;Xcomp<3;Xcomp++) vec[Xcomp]=Xmatrix[index+Xcomp*local_Nsmall];
+			MatrVecMul(3,matrix,vec,result); //β.(D.β'x)
+			for (Xcomp=0;Xcomp<3;Xcomp++) resultvec[j+Xcomp]=argvec[j+Xcomp]+result[Xcomp];
 		}
-		else for (Xcomp=0;Xcomp<3;Xcomp++) resultvec[j+Xcomp]=argvec[j+Xcomp]+cc_sqrt[i]*Xmatrix[index+Xcomp*local_Nsmall]; // result=argvec+cc_sqrt*Xmat
+		else for (Xcomp=0;Xcomp<3;Xcomp++) resultvec[j+Xcomp]=argvec[j+Xcomp]+cc_sqrt[mat][Xcomp]*Xmatrix[index+Xcomp*local_Nsmall];
 		// norm is unaffected by conjugation, hence can be computed here
 		if (ipr) *inprod+=cvNorm2(resultvec+j);
 	}

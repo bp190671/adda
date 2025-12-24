@@ -36,7 +36,7 @@
 // defined and initialized in calculator.c
 extern doublecomplex * restrict E_ad;
 extern double * restrict E2_alldir;
-//extern const doublecomplex cc[][3];
+extern const doublecomplex cc[][3];
 #ifndef SPARSE
 extern doublecomplex * restrict expsX,* restrict expsY,* restrict expsZ;
 #endif
@@ -857,62 +857,88 @@ double ExtCross(const double * restrict incPol)
 double AbsCross(void)
 // Calculate the Absorption cross-section for process 0
 {
-	size_t dip,index;
-	int i,j;
+	size_t dip;
+	int i,j,nmat;
 	unsigned char mat;
-	double sum,temp1,temp2;
-	doublecomplex m,m2m1,tmp;
+	double sum;
+	doublecomplex temp[3], tmp[3][3];
+	doublecomplex m,m2m1;
+	doublecomplex pol;
 	double mult[MAX_NMAT][3]; // multiplier (possibly anisotropic)
-	double multdr;  // multiplier for draine formulation
-	//double mult1[MAX_NMAT];   // multiplier, which is always isotropic
+	doublecomplex alpha[3][3], alphaT[3][3]; //Polarizability tensor α and its transpose
+	doublecomplex P[3]; //Polarization P of the voxel
+	doublecomplex beta[3][3], betaT[3][3]; //Square root of polarizability tensor and its transpose
 
-	// Cabs = 4*pi*sum
 	/* In this function IGT_SO is equivalent to DRAINE. It may seem more logical to make IGT_SO same as FINDIP. However,
 	 * the result is different only for LDR (and similar), for which using IGT does not make a lot of sense anyway.
 	 * Overall, peculiar details related to optical theorem warrant a further study.
 	 */
 	switch (ScatRelation) {
 		/* code below is applicable only for diagonal (for some cases - possibly anisotropic) polarizability and should
-		 * be rewritten otherwise
-		 */
+		 * be rewritten otherwise*/
 		case SQ_IGT_SO:
 		case SQ_DRAINE:
 			/* based on Eq.(35) from Yurkin and Hoekstra, "The discrete dipole approximation: an overview and recent
 			 * developments," JQSRT 106:558-589 (2007).
-			 * summand: Im(P.Eexc(*))-(2/3)k^3*|P|^2=|P|^2*(-Im(1/cc)-(2/3)k^3)
-			 */
-			temp1 = 2*WaveNum*WaveNum*WaveNum/3;
-			//for (i=0;i<Nmat;i++) for (j=0;j<3;j++) mult[i][j]=-cimag(1/cc[i][j])-temp1;
-			for (dip=0,sum=0;dip<local_nvoid_Ndip;++dip) {
-				//mat=material[dip];
-				if (use_wd && volfrac[dip]<1){
-					tmp = cc_sqrt[dip*9]*cc_sqrt[dip*9];
+			 * summand: Cabs=-4πk∑{Im[P*.(P\α)]+(2/3)k^3*|P|^2}*/
+			double ImRR = 2*WaveNum*WaveNum*WaveNum/3;
+			if(use_wd){
+				FILE* draine = fopen("draine.txt","wt");
+				if(print_wd){
+					fprintf(draine,"Absorption cross-section Cabs is computed for each voxel :\n");
+					fprintf(draine,"Boundary voxels (f<1) : Cabs=Im{P.[(1/α)P]*}-(2/3)k^3|P|^2\n");
+					fprintf(draine,"Core voxels (f=1) : Cabs=[Im(1/α)-(2/3)k^3]|P|^2\n\n");
 				}
-				else tmp=cc_sqrt[dip]*cc_sqrt[dip]; //TODO: change from scalars to matrixes, not first priority right now
-				//cSquare(cc_sqrt[dip],tmp);
-				multdr=-cInvIm(tmp)-temp1;
-				index=3*dip;
-				//for(i=0;i<3;i++) sum+=mult[mat][i]*cAbs2(pvec[index+i]);
-				for(i=0;i<3;i++) sum+=multdr*cAbs2(pvec[index+i]);
+				for (dip=0,sum=0;dip<local_nvoid_Ndip;++dip){
+					//Computes Im[P*.(P\α)]=Im{P*.[P\(β'β)]}
+					for(i=0;i<3;i++) P[i]=pvec[3*dip+i];
+					MatrSet(beta,0);
+					if(volfrac[dip]<1.0) for (int i=0;i<3;i++) for (int j=0;j<3;j++) beta[i][j]=sqrtCC[9*dip+i+3*j];
+					else{
+						if(anisotropy) for (int j=0;j<3;j++) beta[j][j]=sqrtCC[9*dip+3*j+j];
+						else for (int j=0;j<3;j++) beta[j][j]=sqrtCC[9*dip];
+					}
+					MatrTrans(betaT,beta);//β'=(β)'
+					MatrProd(3,betaT,beta,alpha); //α=β'.β
+					MatrInv(alpha,tmp); //α->1/α
+					MatrVecMul(3,tmp,P,temp); //1/α->(1/α)P
+					sum+=cimag(cDotProd(P,temp))-ImRR*cvNorm2(P); //Im{P.[(1/α)P]*}-(2/3)k^3|P|^2
+					if(print_wd){
+						fprintf(draine,"Voxel %d : Cabs=%.6e\n",dip,cimag(cDotProd(P,temp))-ImRR*cvNorm2(P));
+						fprintf(draine,"Polarization P=(%.6e+%.6ei, %.6e+%.6ei, %.6e+%.6ei)\n",creal(P[0]),cimag(P[0]),
+						creal(P[1]),cimag(P[1]),creal(P[2]),cimag(P[2]));
+						fprintf(draine,"Polarizability α=\n");
+						DebugMatr(3,draine,alpha);
+					}
+				}
+				fclose(draine);
+			}else{
+				for (i=0;i<Nmat;i++) for (j=0;j<3;j++) mult[i][j]=-cimag(1/cc[i][j])-ImRR;
+				for (dip=0,sum=0;dip<local_nvoid_Ndip;++dip){
+					mat=material[dip];
+					for(i=0;i<3;i++) sum+=mult[mat][i]*cAbs2(pvec[3*dip+i]);
+				}
 			}
 			break;
 		case SQ_FINDIP:
 			/* based on Eq.(31) or equivalently Eq.(58) from the same paper (ref. above)
-			 * summand: Im(P.E(*))=-|P|^2*Im(chi_inv), chi_inv=1/(V*chi)
+			 * summand: Im(P.E(*))=-|P|^2*Im(1/chi)*1/V
 			 */
-			//temp1 = 2*WaveNum*WaveNum*WaveNum/3;
-			for (i=0;i<Nmat;i++) for (j=0;j<3;j++) mult[i][j]=-cimag(chi_inv[i][j]);
-			for (dip=0,sum=0;dip<local_nvoid_Ndip;++dip) {
-				mat=material[dip];
-				index=3*dip;
-				for(i=0;i<3;i++) sum+=mult[mat][i]*cAbs2(pvec[index+i]);
+			if(use_wd){
+				PrintError("FINDIP formulation is not yet ready for WD ! Use DRAINE instead");
+			}else{
+				for (i=0;i<Nmat;i++) for (j=0;j<3;j++) mult[i][j]=-cimag(chi_inv[i][j]);
+				for (dip=0,sum=0;dip<local_nvoid_Ndip;++dip){
+					mat=material[dip];
+					for(i=0;i<3;i++) sum+=mult[mat][i]*cAbs2(pvec[3*dip+i]);
+				}
 			}
 			break;
 
 	}
 	MyInnerProduct(&sum,double_type,1,&Timing_ScatQuanComm);
 	if (surface) sum*=inc_scale;
-	return FOUR_PI*WaveNum*sum;
+	return FOUR_PI*WaveNum*sum; //Cabs = 4*pi*k*sum
 }
 
 //======================================================================================================================

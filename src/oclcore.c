@@ -40,7 +40,7 @@ cl_context context;
 cl_command_queue command_queue;
 cl_kernel clarith1,clarith2,clarith3,clarith3_surface,clarith4,clarith5,clzero,clinprod,clnConj,cltransposeof,
 	cltransposeob,cltransposeofR;
-cl_mem bufXmatrix,bufmaterial,bufposition,bufcc_sqrt,bufargvec,bufresultvec,bufslices,bufslices_tr,bufDmatrix,
+cl_mem bufXmatrix,bufmaterial,bufposition,bufsqrtCC,bufargvec,bufresultvec,bufslices,bufslices_tr,bufDmatrix,
 	bufinproduct;
 
 /* defines if bufargvec and bufresultvec are to be uploaded in the beginning of MatVec

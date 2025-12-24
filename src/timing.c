@@ -40,6 +40,7 @@ size_t TotalEFieldPlane; // total number of planes for scattered field calculati
 // used in calculator.c
 TIME_TYPE Timing_Init, // for total initialization of the program (before CalculateE)
           Timing_Init_Int; // for initialization of interaction routines (including computing tables)
+					Timing_CC; //for square root of couple constant calculation
 size_t TotalEval;      // total number of orientation evaluations
 #ifdef OPENCL
 TIME_TYPE Timing_OCL_Init; // for initialization of OpenCL (including building program)
@@ -265,6 +266,11 @@ void FinalStatistics(void)
 				"File I/O:            "FFORMT"\n",TO_SEC(Timing_FileIO));
 		if (!prognosis) fprintf (logfile,
 				"Integration:         "FFORMT"\n",TO_SEC(Timing_Integration));
+		
+		fprintf(logfile,
+			"--Everything below is related to WD--\n");
+		fprintf(logfile,
+		"Matrix decompositions: "FFORMT"\n",TO_SEC(Timing_CC));
 		// close logfile
 		FCloseErr(logfile,F_LOG,ONE_POS);
 	}

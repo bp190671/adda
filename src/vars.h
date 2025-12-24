@@ -34,7 +34,7 @@ extern double gridspace,dsX,dsY,dsZ,rectScaleX,rectScaleY,rectScaleZ,dipvol,kd,k
 extern double * restrict DipoleCoord;
 extern double * restrict plSec;
 extern doublecomplex * restrict refind;
-extern doublecomplex * restrict cc_sqrt;
+extern doublecomplex * restrict sqrtCC;
 extern double memory,memPeak;
 extern enum inter IntRelation;
 extern enum pol PolRelation;
@@ -45,7 +45,7 @@ extern bool symX,symY,symZ,symR;
 
 // flags
 extern bool prognosis,yzplane,scat_plane,store_mueller,all_dir,scat_grid,phi_integr,sh_granul,reduced_FFT,orient_avg,
-	load_chpoint,beam_asym,anisotropy,save_memory,ipr_required,rectDip,use_wd;
+	load_chpoint,beam_asym,anisotropy,save_memory,ipr_required,rectDip,use_wd,print_wd;
 extern double propAlongZ;
 
 // 3D vectors
@@ -53,13 +53,14 @@ extern double prop_0[3],prop[3],incPolX[3],incPolY[3],beam_center[3],box_origin_
 
 // file info
 extern const char * restrict directory;
+extern FILE * restrict voxel_wd;
 extern FILE * restrict logfile;
 extern int term_width;
 
 // refractive index
 extern int Nmat,Ncomp;
 extern doublecomplex ref_index[MAX_NMAT];
-//extern doublecomplex cc_sqrt[MAX_NMAT][3];
+extern doublecomplex cc_sqrt[MAX_NMAT][3];
 extern doublecomplex chi_inv[MAX_NMAT][3];
 extern unsigned char * restrict material;
 

@@ -1982,13 +1982,15 @@ void InitShape(void)
 //======================================================================================================================
 //added on 5.01.22.
 bool EdgeIn(int i,int j,double nv[8],double res[3])
-/* Finds intersection of plane n.r=1 with edges unit cube. Coordinates of the cube vertices are
- * given by static array v below. n is provided by its scalar products with v - by vector nv.
+/* Finds intersection of plane n.r=1 with edges of the unit cube [-0.5,0.5]x[-0.5,0.5]x[-0.5,0.5]. Coordinates of 
+ * cube vertices are given by static array v below. n is provided by its scalar products with v - by vector nv.
  * i and j are indices of adjacent vertices, defining the edge. Returns true if intersection is
  * inside the edge. Then (only if true) coordinates of the intersection are stored in res.
+ * This code is based on https://cococubed.com/code_pages/raybox.shtml by F.X.Timmes
  */
 {
-	static const double v[8][3]={{0,0,0},{1,0,0},{0,1,0},{0,0,1},{1,0,1},{1,1,0},{0,1,1},{1,1,1}};
+	static const double v[8][3]={{-0.5,-0.5,-0.5},{0.5,-0.5,-0.5},{-0.5,0.5,-0.5},{-0.5,-0.5,0.5},{0.5,-0.5,0.5},
+	{0.5,0.5,-0.5},{-0.5,0.5,0.5},{0.5,0.5,0.5}};
 	bool cond;
 	double t;
 
@@ -2003,113 +2005,51 @@ bool EdgeIn(int i,int j,double nv[8],double res[3])
 
 //==========================================================
 
-double CubePlaneSection(double a,double b,double c)
-/* Calculates volume fraction of unit cube [0,1]x[0,1]x[0,1] between the origin and the plane
- * ax+by+cz=1. It is assumed that a,b,c>=0. The general formula is:
- * [1 - f(a) - f(b) - f(c) + f(a+b) + f(a+c) + f(b+c) - f(a+b+c)]/(6abc), where
- * f(a)= 0 for a>=1 and (1-a)^3 otherwise.
- * The function optimizes the formula for speed and takes care of coefficients close to zero
- * There is a possibility to add correction for spheres, see wd branch if interested
- */
+double VolumeFraction(double a,double b,double c)
+/*Computes the volume fraction of the principal part (p) for the [-0.5,0.5]x[-0.5,0.5]x[-0.5,0.5] cube. A ready-to-use 
+formula already exists for the evaluation of volume fraction based on the [0,1]x[0,1]x[0,1] cube and its intersection
+vertices given by double nv[8]={0,a,b,c,a+c,a+b,b+c,a+b+c}. It requires some transformation of plane coefficients a,b,c 
+to ensure that volume fraction is consistent with the change of origin.
+The general formula (works for a,b,c non-negative) is f0=[1-h(a)-h(b)-h(c)+h(a+b)+h(a+c)+h(b+c)-h(a+b+c)]/(6abc), where
+ h(r)=(1-r)^3, 0<r<1 and 0 otherwise.
+The function optimizes the formula for speed and takes care of coefficients close to zero through some sorting algorithm
+for plane coefficients and explicit expressions for the pyramidal decomposition.*/
 {
-	double tmp,res;
-	double umb,umc; // 1-b and 1-c
+	a = fabs(a); b = fabs(b); c = fabs(c);
 
-	if (a+b+c<=1) return 1;
-	// sort a,b,c in ascending order (a<=b<=c)
-	if (a>b) {
-		if (a>c) {
-			tmp=c;
-			c=a;
-			if (b>tmp) a=tmp;
-			else {
-				a=b;
-				b=tmp;
-			}
-		}
-		else {
-			tmp=a;
-			a=b;
-			b=tmp;
-		}
-	}
-	else if (b>c) {
-		tmp=c;
-		c=b;
-		if (a>tmp) {
-			b=a;
-			a=tmp;
-		}
-		else b=tmp;
-	}
-	//
-	if (a>=1) res=1/(3*a*b);
-	// below a<1
-	else if (b>=1) res=(1-a+ONE_THIRD*a*a)/b;
-	else { // below b<1
-		umb=1-b;
-		umc=1-c;
-		if (umb<=a) { // 1-b<=a  <=>  a+b>=1
-			res=3*a*(1-a+ONE_THIRD*a*a)-umb*umb*umb;
-			if (umc>0) res-=umc*umc*umc; // c<1, then 1-c<=1-b<=a
-			res/=3*a*b;
-		}
-		// below a+b<1
-		else if (c>=1) res=2-a-b;
-		// below c<1
-		else if (umc<=a) res=2-a-b-(umc*umc*umc)/(3*a*b); // 1-c<=a (<=b)  <=>  a+c>=1
-		// below a+c<1
-		else if (umc<=b) { // b+c>=1
-			tmp=b-umc; // 0<=b+c-1<=b
-			res=2*c-(tmp*tmp+a*tmp+ONE_THIRD*a*a)/b;
-		}
-		else { // b+c<1
-			tmp=a+b-umc; // 0<=a+b+c-1<=a<=b, negative case is considered in the beginning
-			res=2*c-(tmp*tmp*tmp)/(3*a*b);
-		}
-	}
-	double vf=res/(2*c);
-	/* determine all intersections;
-	 * based on http://cococubed.asu.edu/code_pages/raybox.shtml by F.X.Timmes
-	 */
-	double nv[8]={0,a,b,c,a+c,a+b,b+c,a+b+c};
-	double p[6][3];
-	int vN=0;
-	if (EdgeIn(0,1,nv,p[vN]) || EdgeIn(1,4,nv,p[vN]) || EdgeIn(4,7,nv,p[vN])) vN++; // 0->1->4->7
-	if (EdgeIn(1,5,nv,p[vN])) vN++; // 1->5
-	if (EdgeIn(0,2,nv,p[vN]) || EdgeIn(2,5,nv,p[vN]) || EdgeIn(5,7,nv,p[vN])) vN++; // 0->2->5->7
-	if (EdgeIn(2,6,nv,p[vN])) vN++; // 2->6
-	if (EdgeIn(0,3,nv,p[vN]) || EdgeIn(3,6,nv,p[vN]) || EdgeIn(6,7,nv,p[vN])) vN++; // 0->3->6->7
-	if (EdgeIn(3,4,nv,p[vN])) vN++; // 3->4
-	// now vN is the number of vertices
-	/* compute moment of inertia of the polygon (<r^2>*S) respective to the axis defined by n
-	 * formula is based on http://en.wikipedia.org/wiki/List_of_moments_of_inertia with correction,
-	 * so that the sum includes i=N as well
-	 */
-	double rc[3]={a,b,c};
-	vMultScalSelf(1/(a*a+b*b+c*c),rc); // rc=n/|n|^2
-	int i,j;
-	for (i=0;i<vN;i++) for(j=0;j<3;j++) p[i][j]-=rc[j]; // shift vertices vectors into a plane
+	// Sort a,b,c in ascending order
+	if (a > b) {double tmp = a; a = b; b = tmp;}
+	if (b > c) {double tmp = b; b = c; c = tmp;}
+	if (a > b) {double tmp = a; a = b; b = tmp;}
 
+	// Transformation coefficient :
+	double gamma = (a + b + c) / 2.0 - 1.0;
+	if (gamma <= 0.0) return 1.0;
+
+	// Rescale gamma to avoid overflows
+	if (1/gamma<DBL_EPSILON) {
+		a /= gamma;
+		b /= gamma;
+		c /= gamma;
+		gamma = 1.0;
+	}
+	double res;
+	if (a >= gamma)
+		res = gamma * gamma * gamma / (3.0 * a * b);
+	else if (b >= gamma)
+		res = (3.0 * gamma * gamma - 3.0 * a * gamma + a * a) / (3.0 * b);
+	else if (a + b >= gamma) {
+		res = (a * (3.0 * gamma * gamma - 3.0 * a * gamma + a * a)
+					- pow(gamma - b, 3.0));
+		if (c <= gamma) res -= pow(gamma - c, 3.0);
+		res /= (3.0 * a * b);
+	}
+	else if (c >= gamma)
+		res = 2.0 * gamma - a - b;
+	double vf = 1.0 - res / (2.0 * c);
 	return vf;
 }
-
-//==========================================================
-
-void Sort(int* indxs, double* values, int n) {
-	double boof;
-	for (int i = 0; i<n; i++){
-		for (int j=i+1; j<n; j++){
-			double vi = values[indxs[i]], vj = values[indxs[j]];
-			if (vi>vj) {
-				boof=indxs[i];
-				indxs[i]=indxs[j];
-				indxs[j]=boof;
-			}
-		}
-	}
-}
-//==========================================================
+//======================================================================================================================
 void MakeParticle(void)
 // creates a particle; initializes all dipoles counts, dpl, dipole sizes
 {
@@ -2122,8 +2062,6 @@ void MakeParticle(void)
 	int j,k,ns;	
 	double tmp1,tmp2,tmp3;
 	double a, b, c; //coefficients determining the plane
-	double norm[3]; //norm vector of the intersecting plane
-	double Ls[9]={0,0,0,0,0,0,0,0,0}; //outer part of depolarization tensor
 	double temp_plane; //used for a, b, c calculation
 	doublecomplex temp1, temp2, temp3;
 	double xr,yr,zr;  // dipole coordinates relative to sizeX. xr is inside (-1/2,1/2), others - based on aspect ratios
@@ -2183,8 +2121,6 @@ void MakeParticle(void)
 		xr=(0.5*xj)/boxX;
 		yr=(0.5*yj)/boxX*(rectScaleY/rectScaleX);
 		zr=(0.5*zj)/boxX*(rectScaleZ/rectScaleX);
-		//yr=(0.5*yj)/boxX;
-		//zr=(0.5*zj)/boxX;
 
 		mat=Nmat; // corresponds to void
 		vf=1;
@@ -2361,32 +2297,33 @@ void MakeParticle(void)
 				if (ro2*ro2+2*rbcS*ro2*z2+z2*z2+rbcP*ro2+rbcQ*z2+rbcR<=0) mat=0;
 				break;
 			case SH_READ: break; // just to have a complete set of cases; this cases is treated separately below
-			case SH_SPHERE:
-				//if (xr*xr+yr*yr+zr*zr<=0.25) mat=0;
-				if (use_wd)
+			case SH_SPHERE: 
+			/*A sphere of diameter D centered at a distance |r0| from the voxel center is considered. Some conditions on both
+			nearest and furthest corners are used to determine whether the voxel is partially inside the sphere, depending on
+			the squared distance |r0|^2. Some threshold is added to prevent singularities in a,b,c*/
+				if (use_wd) //Assumes that WD is used
 				{
-				tmp1 = 2*dh*(fabs(xr)+fabs(yr)+fabs(zr));
-				r2=xr*xr+yr*yr+zr*zr-tmp1+3*dh*dh; // distance squared to the closest corner
-				if (r2<0.25)
+				tmp1 = 2*dh*(fabs(xr)+fabs(yr)+fabs(zr)); // 2(x0+y0+z0)d/2
+				r2=xr*xr+yr*yr+zr*zr; // |r0|^2=x0^2+y0^2+z0^2
+				if (r2-tmp1+3*dh*dh<0.25) //If the nearest corner is inside the sphere (f>0),...
 				 {
-					mat=0;
-					if (r2+2*tmp1>0.25)
+					mat=0; //..., then the scatterer material is assigned
+					if (r2+tmp1+3*dh*dh>0.25) //If the furthest corner is outside the sphere (f<1),...
 						{
-						//vf=CubeSphereSection(fabs(xr)-dh,fabs(yr)-dh,fabs(zr)-dh,r2,0.25,2*dh);
 							vf=0;
-							if (r2==0) a=b=c=2*dh/sqrt(0.75); //may happen for very small grid sizes
-							else
+							if (abs(r2-0.25)<FLT_EPSILON) //Plane crosses the voxel center (f=1/2)
 								{
-									temp_plane = 2*dh/(sqrt(r2*0.25)-r2);
-									a = temp_plane*(fabs(xr)-dh);
-									b = temp_plane*(fabs(yr)-dh);
-									c = temp_plane*(fabs(zr)-dh);
-								}
-
+								r2+=FLT_EPSILON;
+								temp_plane = 2*dh/(sqrt(r2*0.25)-r2);
 							}
+							else temp_plane = 2*dh/(sqrt(r2*0.25)-r2);
+								a = temp_plane*(xr);
+								b = temp_plane*(yr);
+								c = temp_plane*(zr);
+						}
 					}
 				}
-				else if (xr*xr+yr*yr+zr*zr<=0.25) mat=0;
+				else if (xr*xr+yr*yr+zr*zr<=0.25) mat=0; // Traditional discretization (f=1)
 				break;
 			case SH_SPHEREBOX:
 				if (xr*xr+yr*yr+zr*zr<=coat_r2) mat=1;
@@ -2527,50 +2464,60 @@ void MakeParticle(void)
 	// copy nontrivial part of arrays and compute (effective) refractive index
 	index=0;
 	nvol=0;
-	//FILE *fp;
-	//fp = fopen("vf+Ls.txt", "w+");
+	FILE *values = fopen("vf.txt", "w+");
+	if(print_wd) fprintf(values,"Volume fractions correspond to the scatterer\n\n");
+	double N,Ns; //Number of non-void and boundary voxels
 	for (dip=0;dip<local_Ndip;dip++) if (material_tmp[dip]<Nmat) {
-	//	double real_temp_2, real_temp_3;
 		mat=material[index]=material_tmp[dip];
 		vMultScal(gridspace,DipoleCoord_tmp+3*dip,DipoleCoord+3*index);
-		//vMultScal(1.0,plSec_tmp+3*dip,plSec+3*index);
 		memcpy(position+3*index,position_tmp+3*dip,3*sizeof(short int));
 		memcpy(plSec+3*index,plSec_tmp+3*dip,3*sizeof(double));
 		memcpy(volfrac+index,volfrac_tmp+dip,sizeof(double));
 		// !!! TODO: this is currently incompatible with anisotropy
+				N++;
 				vf=volfrac[index];
-				if (vf==0)
-				{
-					vf=CubePlaneSection(plSec[3*index], plSec[3*index+1], plSec[3*index+2]);
+				if(print_wd){
+					double pos[3]={position[3*index],position[3*index+1],position[3*index+2]};
+					fprintf(values,"Voxel index : %d\n", index);
+					fprintf(values,"Center coordinates r = (%.0f,%.0f,%.0f)\n",pos[0],pos[1],pos[2]);
+				}
+				if (vf==0){
+					double r[3]={DipoleCoord[3*index],DipoleCoord[3*index+1],DipoleCoord[3*index+2]};
+					double n[3]={plSec[3*index],plSec[3*index+1],plSec[3*index+2]};
+					vf=VolumeFraction(n[0],n[1],n[2]);
 					volfrac[index]=vf;
-					//volfrac[index]=1.0;// - 10e-5;
+					bool cond=(DotProd(n,r)>=0);
+					if(print_wd) fprintf(values,"Vector normal to the plane n = (%.16f,%.16f,%.16f)\n",n[0],n[1],n[2]);
+					if(!cond){
+						vf=1-vf;
+						if(print_wd) fprintf(values,"(p)=vacuum, (s)=scatterer\n");
+					}else if(print_wd) fprintf(values,"(p)=scatterer, (s)=vacuum\n");
+					Ns++;
 				}
 				nvol+=vf;
-				//if (vf<=0.5) vf=0.0001;
-				//else vf=1;
-				//vf=1;
-				//fprintf(fp, "vf=%.6e\n", vf);
-				//fprint(fp, "dip=%d\n", dip);
-				/*if (vf==1)*/ refind[index]=ref_index[mat];
-			//	else {
-			//		temp1=ref_index[mat]*ref_index[mat];
-			//		temp2=temp1;
-			//		temp2-=1;
-			//		temp3=temp1;
-			//		temp3+=2;
-			//		temp1=temp2/temp3;
-			//		temp1=temp1*vf; // temp1=x=vf*(m^2-1)/(m^2+2)
-			//		temp2=temp1*2;
-			//		temp2+=1;
-			//		temp3=-temp1;
-			//		temp3+=1;
-			//		temp1=temp2/temp3;
-			//		refind[index]=csqrt(temp1);
-			//	}
-			//	fprintf(fp, "vf[%llu]= %.6e\n, Ls = %.6e %.6e %.6e\n %.6e %.6e %.6e\n %.6e %.6e %.6e\n", index, vf, Ls[0], Ls[1], Ls[2], Ls[3], Ls[4], Ls[5], Ls[6], Ls[7], Ls[8]);
-				index++;
-
+			if(print_wd){
+				fprintf(values,"Volume fraction f = %.10f\n", vf);
+				fprintf(values,"\n");
+			}
+			refind[index]=ref_index[mat];
+			// fprintf(values,"Refractive index m = %.5f+%.5fI\n", creal(refind[index]), cimag(refind[index]));
+			index++;
 	}
+	fclose(values);
+	/*Here, some error analysis is performed where the average volume fraction error <Δf> (or simply volume error ΔV) is 
+	determined. The sign of the error Δf=<f0>-<f>=<f0>-fvol is based on the sphere for which there is an overestimation 
+	of the volume fraction since the sphere is a convex shape. These values can be accessed in the logfile.*/
+	fprintf(logfile,"\n===============================================================================================\n");
+	fprintf(logfile," Error estimate of the scatterer volume");
+	fprintf(logfile,"\n===============================================================================================\n");
+	fprintf(logfile,"Total number of voxels N=%.0f\n",Ndip);
+	fprintf(logfile,"Number of non-void voxels N'=%.0f\n",N);
+	fprintf(logfile,"Number of boundary voxels Ns=%.0f\n",Ns);
+	fprintf(logfile,"Proportion of boundary voxels Ns/N'=%.10f\n",Ns/N);
+	fprintf(logfile,"Sum of volume fractions Σf=%.10f\n",nvol);
+	fprintf(logfile,"Average volume fraction <f>=%.10f\n",nvol/Ndip);
+	fprintf(logfile,"Volume fraction error <Δf>=%.10f",nvol/Ndip-volume_ratio);
+	fprintf(logfile,"\n===============================================================================================\n");
 
 	/* from this moment on a_eq and all derived quantities are based on the real a_eq, which can
 		 * in several cases be slightly different from the one given by '-eq_rad' option.

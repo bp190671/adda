@@ -403,7 +403,7 @@ PARSE_FUNC(sym);
 PARSE_FUNC(test);
 PARSE_FUNC(V) ATT_NORETURN;
 PARSE_FUNC(vec);
-PARSE_FUNC(weighted_discr); //new function for wd
+PARSE_FUNC(weighted_discr);
 PARSE_FUNC(yz);
 /* TO ADD NEW COMMAND LINE OPTION
  * add a function prototype to this list. Add a line 'PARSE_FUNC(option_name);' in alphabetical order. It will be
@@ -1781,12 +1781,7 @@ PARSE_FUNC(vec)
 }
 PARSE_FUNC(weighted_discr)
 {
-	//if (rectDip)
-	//	PrintErrorHelpSafe("Weighted discretization does not support rectangular dipoles");
-	//if (!(shape == SH_SPHERE || shape == SH_CYLINDER))
-	//	PrintErrorHelpSafe("Weighted discretization does not support '%s', allowed shapes are: sphere, cylinder.", shapename);
-
-		use_wd = true;
+	use_wd = true;
 }
 PARSE_FUNC(yz)
 {
@@ -1940,8 +1935,7 @@ void InitVariables(void)
 	chp_type=CHP_NONE;
 	orient_avg=false;
 	alph_deg=bet_deg=gam_deg=0.0;
-	//volcor=true;
-	volcor=false; // !!! TODO: temporary hack
+	volcor=false;
 	reduced_FFT=true;
 	save_geom=false;
 	save_geom_fname="";
@@ -1960,6 +1954,7 @@ void InitVariables(void)
 	calc_asym=false;
 	calc_mat_force=false;
 	use_wd = true;
+	print_wd = true;
 	store_force=false;
 	store_mueller=true;
 	store_ampl=false;

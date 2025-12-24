@@ -966,7 +966,6 @@ static void InitRmatrix(const double invNgrid)
 #endif
 }
 
-
 //======================================================================================================================
 
 void InitDmatrix(void)
@@ -1084,7 +1083,7 @@ void InitDmatrix(void)
 	/* The following are constant device buffers which are initialized with host data. They are all created here (to be
 	 * compatible with prognosis), but some are initialized (filled with data) later.
 	 */
-	CREATE_CL_BUFFER(bufcc_sqrt,CL_MEM_READ_ONLY,sizeof(cc_sqrt),NULL);
+	CREATE_CL_BUFFER(bufsqrtCC,CL_MEM_READ_ONLY,sizeof(sqrtCC),NULL);
 	CREATE_CL_BUFFER(bufDmatrix,CL_MEM_READ_ONLY,Dsize*sizeof(*Dmatrix),NULL);
 	if (surface) CREATE_CL_BUFFER(bufRmatrix,CL_MEM_READ_ONLY,Rsize*sizeof(*Rmatrix),NULL);
 	CREATE_CL_BUFFER(bufmaterial,CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,local_nvoid_Ndip*sizeof(*material),material);
@@ -1158,7 +1157,7 @@ void InitDmatrix(void)
 		// for arith1
 		CL_CH_ERR(clSetKernelArg(clarith1,0,sizeof(cl_mem),&bufmaterial));
 		CL_CH_ERR(clSetKernelArg(clarith1,1,sizeof(cl_mem),&bufposition));
-		CL_CH_ERR(clSetKernelArg(clarith1,2,sizeof(cl_mem),&bufcc_sqrt));
+		CL_CH_ERR(clSetKernelArg(clarith1,2,sizeof(cl_mem),&bufsqrtCC));
 		CL_CH_ERR(clSetKernelArg(clarith1,3,sizeof(cl_mem),&bufargvec));
 		CL_CH_ERR(clSetKernelArg(clarith1,4,sizeof(cl_mem),&bufXmatrix));
 		CL_CH_ERR(clSetKernelArg(clarith1,5,sizeof(size_t),&local_Nsmall));
@@ -1191,7 +1190,7 @@ void InitDmatrix(void)
 		// for arith5
 		CL_CH_ERR(clSetKernelArg(clarith5,0,sizeof(cl_mem),&bufmaterial));
 		CL_CH_ERR(clSetKernelArg(clarith5,1,sizeof(cl_mem),&bufposition));
-		CL_CH_ERR(clSetKernelArg(clarith5,2,sizeof(cl_mem),&bufcc_sqrt));
+		CL_CH_ERR(clSetKernelArg(clarith5,2,sizeof(cl_mem),&bufsqrtCC));
 		CL_CH_ERR(clSetKernelArg(clarith5,3,sizeof(cl_mem),&bufargvec));
 		CL_CH_ERR(clSetKernelArg(clarith5,4,sizeof(cl_mem),&bufXmatrix));
 		CL_CH_ERR(clSetKernelArg(clarith5,5,sizeof(size_t),&local_Nsmall));
@@ -1484,7 +1483,7 @@ void Free_FFT_Dmat(void)
 	my_clReleaseBuffer(bufXmatrix);
 	my_clReleaseBuffer(bufmaterial);
 	my_clReleaseBuffer(bufposition);
-	my_clReleaseBuffer(bufcc_sqrt);
+	my_clReleaseBuffer(bufsqrtCC);
 	my_clReleaseBuffer(bufargvec);
 	my_clReleaseBuffer(bufresultvec);
 	my_clReleaseBuffer(bufslices);

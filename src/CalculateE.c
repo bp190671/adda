@@ -830,6 +830,7 @@ static void StoreIntFields(const enum incpol which)
 // Write actual internal fields (not exciting) on each dipole to file
 {
 	// calculate fields; e_field=P/(V*chi)=chi_inv*P; for anisotropic - by components
+	/*The following need to be modified using effective susceptibility instead !*/
 	nMult_mat(xvec,pvec,chi_inv);
 	// save fields to file
 	StoreFields(which,xvec,NULL,F_INTFLD,F_INTFLD_TMP,"E","Internal fields");
@@ -846,7 +847,7 @@ int CalculateE(const enum incpol which,const enum Eftype type)
 	TIME_TYPE tstart;
 
 	tstart=GET_TIME();
-	// calculate the incident field Einc; vector b=Einc*cc_sqrt
+	// calculate the incident field Einc; vector b=Einc*sqrtCC
 	D("Generating B");
 	GenerateB (which,Einc);
 	if (store_beam) StoreFields(which,Einc,NULL,F_BEAM,F_BEAM_TMP,"Einc","Incident beam");
