@@ -45,6 +45,8 @@ typedef const ComplexType cComplexType;
 #define WL(i,j) Element(W,i,j)
 #endif
 
+void SchurDecomposition(int n,double complex _A[][n],double complex _U[][n],double complex _D[][n]);
+void TriSqrt(double complex D[3][3], double complex S[3][3]);
 void TakagiFactor(cint n, ComplexType *A, cint ldA, RealType *d, ComplexType *U, cint ldU, cint sort);
   
   /* A matrix is considered diagonal if the sum of the squares

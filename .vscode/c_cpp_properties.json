@@ -1,0 +1,10 @@
+{
+    "configurations": [
+        {
+            "name": "default",
+            "compileCommands": "${workspaceFolder}/compile_commands.json",
+            "cStandard": "c99"
+        }
+    ],
+    "version": 4
+}

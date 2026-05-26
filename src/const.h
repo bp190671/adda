@@ -16,7 +16,7 @@
 #define __const_h
 
 // version number (string)
-#define ADDA_VERSION "1.4.0"
+#define ADDA_VERSION "1.5.0-alpha3"
 
 /* ADDA uses certain C99 extensions, which are widely supported by GNU and Intel compilers. However, they may be not
  * completely supported by e.g. Microsoft Visual Studio compiler. Therefore, we check the version of the standard here
@@ -62,6 +62,7 @@ the compilation may fail or produce wrong results. If you still want to try, ena
 #define DIV_CEILING(A,B) (((A)%(B)==0) ? (A)/(B) : ((A)/(B))+1 ) // valid only for nonnegative A and B
 #define LENGTH(A) ((int)(sizeof(A)/sizeof(A[0]))) // length of any array (converted to int)
 #define STRINGIFY(A) #A
+#define TO_STRING(A) STRINGIFY(A)
 #define GREATER_EQ2(a1,a2,b1,b2) ( (a1)>(b1) || ( (a1)==(b1) && (a2)>=(b2) )) // a1.a2>=b1.b2
 
 // parallel definitions
@@ -74,30 +75,32 @@ the compilation may fail or produce wrong results. If you still want to try, ena
  */
 #define ADDA_ROOT 0
 
-// math constants rounded for 32 decimals; C99 standard specifies that they are encoded as double
-#define PI                  3.1415926535897932384626433832795
-#define TWO_PI              6.283185307179586476925286766559
-#define FOUR_PI             12.566370614359172953850573533118
-#define EIGHT_PI            25.132741228718345907701147066236
-#define FOUR_PI_OVER_THREE  4.1887902047863909846168578443727
-#define PI_OVER_TWO         1.5707963267948966192313216916398
-#define PI_OVER_FOUR        0.78539816339744830961566084581988
-#define PI_OVER_SIX         0.52359877559829887307710723054658
-#define INV_PI              0.31830988618379067153776752674503
-#define TWO_OVER_PI         0.63661977236758134307553505349006
-#define THREE_OVER_FOUR_PI  0.23873241463784300365332564505877
-#define SIX_OVER_PI         1.9098593171027440292266051604702
-#define ONE_THIRD           0.33333333333333333333333333333333
-#define PI_OVER_180         0.017453292519943295769236907684886
-#define INV_PI_180          57.295779513082320876798154814105
-#define SQRT_PI             1.7724538509055160272981674833411
-#define TWO_OVER_SQRT_PI    1.1283791670955125738961589031215
-#define SQRT2               1.4142135623730950488016887242097
-#define SQRT3               1.7320508075688772935274463415059
-#define SQRT1_2             0.70710678118654752440084436210485
-#define SQRT1_2PI           0.39894228040143267793994605993438
-#define SQRT2_9PI           0.26596152026762178529329737328959
-#define EULER               0.57721566490153286060651209008241
+/* math constants with 35 significant digits (sufficient for quad precision, if ever needed). This applies to all
+ * constants in the code. C99 standard specifies that they are encoded as double as written now
+ */
+#define PI                  3.1415926535897932384626433832795029
+#define TWO_PI              6.2831853071795864769252867665590058
+#define FOUR_PI             12.566370614359172953850573533118012
+#define EIGHT_PI            25.132741228718345907701147066236023
+#define FOUR_PI_OVER_THREE  4.1887902047863909846168578443726705
+#define PI_OVER_TWO         1.5707963267948966192313216916397514
+#define PI_OVER_FOUR        0.78539816339744830961566084581987572
+#define PI_OVER_SIX         0.52359877559829887307710723054658381
+#define INV_PI              0.31830988618379067153776752674502872
+#define TWO_OVER_PI         0.63661977236758134307553505349005745
+#define THREE_OVER_FOUR_PI  0.23873241463784300365332564505877154
+#define SIX_OVER_PI         1.9098593171027440292266051604701723
+#define ONE_THIRD           0.33333333333333333333333333333333333
+#define PI_OVER_180         0.017453292519943295769236907684886127
+#define INV_PI_180          57.295779513082320876798154814105170
+#define SQRT_PI             1.7724538509055160272981674833411452
+#define TWO_OVER_SQRT_PI    1.1283791670955125738961589031215452
+#define SQRT2               1.4142135623730950488016887242096981
+#define SQRT3               1.7320508075688772935274463415058724
+#define SQRT1_2             0.70710678118654752440084436210484904
+#define SQRT1_2PI           0.39894228040143267793994605993438187
+#define SQRT2_9PI           0.26596152026762178529329737328958791
+#define EULER               0.57721566490153286060651209008240243
 #define FULL_ANGLE          360.0
 #define MICRO               1E-6
 
@@ -105,9 +108,9 @@ the compilation may fail or produce wrong results. If you still want to try, ena
 #define BOX_MAX USHRT_MAX
 
 // sizes of some arrays
-#define MAX_NMAT         15   // maximum number of different refractive indices (<256)
-#define MAX_N_SH_PARMS   25   // maximum number of shape parameters
-#define MAX_N_BEAM_PARMS 10   // maximum number of beam parameters
+#define MAX_NMAT         60  // maximum number of different refractive indices (<256)
+#define MAX_N_SH_PARMS   MAX(25,MAX_NMAT+1) // maximum number of shape parameters (upper limit due to ONION_ELL)
+#define MAX_N_BEAM_PARMS 10 // maximum number of beam parameters
 
 // sizes of filenames and other strings
 /* There is MAX_PATH constant that equals 260 on Windows. However, even this OS allows ways to override this limit. On
@@ -119,7 +122,7 @@ the compilation may fail or produce wrong results. If you still want to try, ena
 #define MAX_FNAME_SH     100 // maximum length of filename (used for known names)
 #define MAX_TMP_FNAME_SH  15 // maximum length of names of temporary files (short)
 #define MAX_SYSTEM_CALL   10 // maximum string length of system call (itself)
-#define MAX_WORD          10 // maximum length of a short word
+#define MAX_WORD          12 // maximum length of a short word
 #define MAX_LINE         100 // maximum length of a line
 #define BUF_LINE         300 // size of buffer for reading lines (longer lines are handled robustly)
 #define MAX_PARAGRAPH    600 // maximum length of a paragraph (few lines)
@@ -151,36 +154,57 @@ the compilation may fail or produce wrong results. If you still want to try, ena
 	// derived formats; starting "" is to avoid redundant syntax errors in Eclipse
 #define GFORM3V "("GFORM","GFORM","GFORM")"
 #define GFORM3L ""GFORM" "GFORM" "GFORM
+#define GFORM4L ""GFORM" "GFORM" "GFORM" "GFORM
+#define GFORM5L ""GFORM" "GFORM" "GFORM" "GFORM" "GFORM
 #define GFORM6L ""GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM
 #define GFORM7L ""GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM
+#define GFORM9L ""GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM
 #define GFORM10L ""GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM
+#define GFORM12L ""GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM
+#define GFORM21L ""GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM
 #define GFORMDEF3V "("GFORMDEF","GFORMDEF","GFORMDEF")"
 #define CFORM3V "("CFORM","CFORM","CFORM")"
 	// macros to shorten printing of all vector components
 #define COMP3V(a) (a)[0],(a)[1],(a)[2]
+#define COMP9V(a) (a)[0],(a)[1],(a)[2],(a)[3],(a)[4],(a)[5],(a)[6],(a)[7],(a)[8]
 #define COMP16V(a) (a)[0],(a)[1],(a)[2],(a)[3],(a)[4],(a)[5],(a)[6],(a)[7],(a)[8],(a)[9],(a)[10],(a)[11],(a)[12],\
 	(a)[13],(a)[14],(a)[15]
 
+enum emt { // which effective medium theory to use with EMA
+	EMT_LL, //Lorentz-Lorenz mixing rule
+	EMT_BR, //Bruggeman mixing rule (weighted average as LL)
+};
+
+enum matsqrt { // which method to solve matrix square roots
+	SQRT_TAKAGI, //Takagi decomposition (singular value decomposition)
+	SQRT_SYLVESTER, //Sylvester formula (eigenvalue-based analytical method)
+	SQRT_SCHUR, //Schur decomposition (eigenvalue decomposition)
+};
+
 enum sh { // shape types
-	SH_AXISYMMETRIC, // axisymmetric
-	SH_BICOATED,     // two coated spheres
-	SH_BIELLIPSOID,  // two general ellipsoids
-	SH_BISPHERE,     // two spheres
-	SH_BOX,          // box (may be rectangular)
-	SH_CAPSULE,      // capsule
-	SH_CHEBYSHEV,    // Chebyshev particle (axisymmetric)
-	SH_COATED,       // coated sphere
-	SH_CYLINDER,     // cylinder
-	SH_EGG,          // egg
-	SH_ELLIPSOID,    // general ellipsoid
-	SH_LINE,         // line with width of one dipole
-	SH_PLATE,        // plate
-	SH_PRISM,        // right rectangular prism
-	SH_RBC,          // Red Blood Cell
-	SH_READ,         // read from file
-	//SH_SDISK_ROT,  // disc cut of a sphere -- not operational
-	SH_SPHERE,       // sphere
-	SH_SPHEREBOX     // sphere in a box
+	SH_AXISYMMETRIC,  // axisymmetric
+	SH_BICOATED,      // two coated spheres
+	SH_BIELLIPSOID,   // two general ellipsoids
+	SH_BISPHERE,      // two spheres
+	SH_BOX,           // box (may be rectangular)
+	SH_CAPSULE,       // capsule
+	SH_CHEBYSHEV,     // Chebyshev particle (axisymmetric)
+	SH_COATED,        // coated sphere
+	SH_COATED2,       // three concentric spheres (core with 2 shells) - Deprecated, use ONION instead
+	SH_CYLINDER,      // cylinder
+	SH_EGG,           // egg
+	SH_ELLIPSOID,     // general ellipsoid
+	SH_LINE,          // line with width of one voxel
+	SH_ONION,         // multilayered concentric sphere
+	SH_ONION_ELL,     // multilayered concentric ellipsoid
+	SH_PLATE,         // plate
+	SH_PRISM,         // right rectangular prism
+	SH_RBC,           // Red Blood Cell
+	SH_READ,          // read from file
+	//SH_SDISK_ROT,   // disc cut of a sphere -- not operational
+	SH_SPHERE,        // sphere
+	SH_SPHEREBOX,     // sphere in a box
+	SH_SUPERELLIPSOID // superellipsoid
 	/* TO ADD NEW SHAPE
 	 * add an identifier starting with 'SH_' and a descriptive comment to this list in alphabetical order.
 	 */
@@ -189,15 +213,14 @@ enum sh { // shape types
 enum pol { // which way to calculate coupleconstant
 	POL_CLDR,    // Corrected Lattice Dispersion Relation
 	POL_CM,      // Clausius-Mossotti
-	POL_DGF,     // Digitized Green's Function (second order approximation of LAK)
+	POL_DGF,     // Digitized Green's Function (second-order approximation of LAK)
 	POL_FCD,     // Filtered Coupled Dipoles
-	POL_IGT_SO,  // Second order approximation to Green's tensor integrated over a cube
+	POL_IGT_SO,  // Second-order approximation to Green's tensor integrated over a cube
 	POL_LAK,     // Exact result of IGT for sphere
 	POL_LDR,     // Lattice Dispersion Relation
-	POL_NLOC,    // non-local extension (Gaussian dipole-density, formula based on lattice sums)
-	POL_NLOC_AV, // same as NLOC, but based on averaging of Gaussian over the dipole volume
-	POL_RRC,     // Radiative Reaction correction
-	POL_SO       // Second Order formulation
+	POL_NLOC,    // Non-local extension (Gaussian dipole-density, formula based on lattice sums)
+	POL_NLOC_AV, // Same as NLOC, but based on averaging of Gaussian over the dipole volume
+	POL_RRC      // Radiative Reaction correction
 	/* TO ADD NEW POLARIZABILITY FORMULATION
 	 * add an identifier starting with 'POL_' and a descriptive comment to this list in the alphabetical order.
 	 */
@@ -206,10 +229,9 @@ enum pol { // which way to calculate coupleconstant
 
 enum scat { // how to calculate scattering quantities
 	SQ_DRAINE, // classical, as Draine
-	SQ_FINDIP, /* Same as Draine, but with correction of radiation energy of a _finite_ dipole when calculating
+	SQ_FINDIP, /* Same as Draine, but with correction of radiation energy of a _finite_ dipole (voxel) when calculating
 	              absorption cross section */
-	SQ_IGT_SO, // Integration of Green's tensor (second order in kd approximation)
-	SQ_SO      // Second Order formulation
+	SQ_IGT_SO  // Integration of Green's tensor (approximation of second order in kd)
 };
 // in alphabetical order
 
@@ -217,16 +239,15 @@ enum inter { // how to calculate interaction term
 	G_FCD,       // Filtered Green's tensor (Filtered Coupled Dipoles)
 	G_FCD_ST,    // quasi-static version of FCD
 	G_IGT,       // (direct) integration of Green's tensor
-	G_IGT_SO,    // approximate integration of Green's tensor (based on ideas of SO)
+	G_IGT_SO,    // approximate analytical integration of Green's tensor (second-order approximation)
 	G_NLOC,      // non-local extension (interaction of Gaussian dipole-densities)
 	G_NLOC_AV,   // same as NLOC, but based on averaging of Gaussian over the dipole volume
-	G_POINT_DIP, // as point dipoles
-	G_SO         // Second Order formulation
+	G_POINT_DIP  // as point dipoles
 	/* TO ADD NEW INTERACTION FORMULATION
 	 * add an identifier starting with 'G_' and a descriptive comment to this list in the alphabetical order.
 	 */
 };
-enum refl { // how to calculate interaction of dipoles through the nearby surface (reflected G)
+enum refl { // how to calculate interaction of voxels through the nearby surface (reflected G)
 	GR_IMG,       // approximate expression based on a single image dipole
 	GR_SOM        // direct evaluation of Sommerfeld integrals
 	/* TO ADD NEW REFLECTION FORMULATION
@@ -237,23 +258,19 @@ enum refl { // how to calculate interaction of dipoles through the nearby surfac
 // ldr constants
 /* Based on comparison of the original paper - Draine & Goodman, Astrophys. J. 405, 685-697 (1993) - with Mackowski,
  * J. Opt. Soc. Am. A 19, 881-893 (2002), one can deduce that b1=10*b2+2*b3 - it can also be derived explicitly.
+ * We have transformed the defining integrals (in DG1993) to a rapidly converging sum, containing exp and erfc
+ * functions. This is not yet published, but allows simple calculation of constants to arbitrary precision.
  */
-#define LDR_B1  1.8915316
-#define LDR_B2 -0.1648469
-#define LDR_B3  1.7700004
+#define LDR_B1  1.8915316529870796511106114030718259
+#define LDR_B2 -0.16484691508771947306079362778185226
+#define LDR_B3  1.7700004019321371908592738404451742
 
-// 2nd_order constants; derived from c1=ln(5+3^(3/2))-ln(2)/2-pi/4 and c2=pi/6
-#define SO_B1 1.5867182426530356710958782335228 // 4c1/3
-#define SO_B2 0.13488017286410948123541594310740 // c1/3 - c2/2
-#define SO_B3 0.11895825700597042937085940122438 // (5/2)c1 - c2
+// 2nd_order constant; derived from c1=1.5*ln[2+sqrt(3)]-pi/4
+#define SO_B1 1.5867182426530356710958782335227693 // 4c1/3
 
 // other constants for polarizability
-#define DGF_B1 1.6119919540164696407169668466385  // (4pi/3)^(1/3)
-#define LAK_C  0.62035049089940001666800681204778 // (4pi/3)^(-1/3)
-
-// two boundaries for separation between G_SO 'close', 'median', and 'far'
-#define G_BOUND_CLOSE  1 // k*R^2/d < GB_CLOSE => 'close'
-#define G_BOUND_MEDIAN 1 // k*R < GB_MEDIAN => 'median'
+#define DGF_B1 1.6119919540164696407169668466392849  // (4pi/3)^(1/3)
+#define LAK_C  0.62035049089940001666800681204777817 // (4pi/3)^(-1/3)
 
 enum iter { // iterative methods
 	IT_BCGS2,    // Enhanced Bi-Conjugate Gradient Stabilized (2)
@@ -285,6 +302,15 @@ enum incpol {
 
 enum beam { // beam types
 	B_BARTON5, // 5th order description of the Gaussian beam
+#ifndef NO_FORTRAN
+	B_BES_CS,  // Bessel beam with circularly symmetric energy density
+	B_BES_CSp, // Alternative Bessel beam with circularly symmetric energy density
+	B_BES_M,   // Generalized Bessel beam
+	B_BES_LE,  // Bessel beam with linearly polarized electric field
+	B_BES_LM,  // Bessel beam with linearly polarized magnetic field
+	B_BES_TEL, // Linear component of the TE Bessel beam
+	B_BES_TML, // Linear component of the TM Bessel beam
+#endif
 	B_DAVIS3,  // 3rd order description of the Gaussian beam
 	B_DIPOLE,  // field of a point dipole
 	B_LMINUS,  // 1st order description of the Gaussian beam
@@ -353,6 +379,11 @@ enum init_field { // how to calculate initial field to be used in the iterative 
 #define F_DIPPOL        "DipPol"
 #define F_BEAM          "IncBeam"
 #define F_GRANS         "granules"
+#define F_NORM        	"NormVec"
+#define F_VOLFRAC       "VolFrac"
+#define F_REFIND       	"RefIndex"
+#define F_INVCHI				"InvChi"
+#define F_SQRTCC       	"SqrtCC"
 	// suffixes
 #define F_XSUF          "-X"
 #define F_YSUF          "-Y"
@@ -383,6 +414,11 @@ enum init_field { // how to calculate initial field to be used in the iterative 
 #define F_INTFLD_TMP    "f%d.tmp"
 #define F_DIPPOL_TMP    "p%d.tmp"
 #define F_GEOM_TMP      "g%d.tmp"
+#define F_NORM_TMP    	"n%d.tmp"
+#define F_VOLFRAC_TMP   "v%d.tmp"
+#define F_REFIND_TMP   	"r%d.tmp"
+#define F_INVCHI_TMP   	"i%d.tmp"
+#define F_SQRTCC_TMP   	"s%d.tmp"
 	// checkpoint files
 #define F_CHP_LOG       "chp.log"
 #define F_CHP           "chp.%d"   // ringid as argument

@@ -35,6 +35,7 @@
 // useful macro for printing complex numbers and matrices
 #define REIM(a) creal(a),cimag(a)
 #define REIM3V(a) REIM((a)[0]),REIM((a)[1]),REIM((a)[2])
+#define REIM9V(a) REIM((a)[0]),REIM((a)[1]),REIM((a)[2]),REIM((a)[3]),REIM((a)[4]),REIM((a)[5]),REIM((a)[6]),REIM((a)[7]),REIM((a)[8])
 
 #ifndef NO_IMEXP_TABLE
 void imExpTableInit(void);
@@ -58,11 +59,6 @@ static inline double cAbs2(const doublecomplex a)
 }
 
 //======================================================================================================================
-
-static inline doublecomplex cSquare(const doublecomplex a)
-{
-	return creal(a)*creal(a)-cimag(a)*cimag(a)+2*creal(a)*cimag(a);
-}
 
 static inline doublecomplex cSqrtCut(const doublecomplex a)
 // square root of complex number, with explicit handling of branch cut (not to depend on sign of zero of imaginary part)
@@ -107,6 +103,39 @@ static inline doublecomplex imExp(const double arg)
 #else
 	return imExpTable(arg);
 #endif
+}
+
+//======================================================================================================================
+
+static inline doublecomplex imExpM1(const double arg)
+/* exp(i*arg) - 1 (should be used for small argument to avoid precision loss
+ * We employ special code only for small arguments, ignoring the case when arg is close to 2piN. The latter can,
+ * in principle, be handled by preliminary range reduction as in imExpTable. We do not implement it here, because such
+ * case is a "coincidence" - may happen for a single voxel (or a plane of voxels), while the case of small arg may
+ * happen for all voxels. In the latter case loss of precision affects all computed quantities.
+ * The used expression through tan(arg/2) follows from general expression for cexpm1 below.
+ */
+{
+	if (fabs(arg)<1) {
+		double t=tan(0.5*arg);
+		return -2*t/(I+t); // Alternatively, (I-t)*2t/(1+t^2), but we leave the optimization to compiler
+	}
+	else return imExp(arg)-1;
+}
+
+//======================================================================================================================
+
+static inline doublecomplex cExpM1(const doublecomplex a)
+/* Complex analogue of expm1 function ( exp(a) - 1 ), should be used for small arguments to avoid precision loss
+ * The algorithm is a simplified version of the one published in Section 17.7 of Beebe N.H.F., The Mathematical-Function
+ * Computation Handbook: Programming Using the MathCW Portable Software Library. Springer; 2017.
+ *  */
+{
+	if (fabs(creal(a))+fabs(cimag(a))<1) { // uses faster L1-norm instead of L2-norm
+		doublecomplex t=ctanh(0.5*a);
+		return 2*t/(1-t);
+	}
+	else return cexp(a)-1;
 }
 
 //======================================================================================================================
@@ -826,6 +855,12 @@ static inline void MatrTrans(doublecomplex dest[static 3][3], doublecomplex src[
 			dest[i][j] = src[j][i];
 }
 //======================================================================================================================
+static inline void MatrAdj(doublecomplex dest[static 3][3], doublecomplex src[static 3][3]) {
+	for (int j = 0; j < 3; j++) // A * x_j = e_j
+		for (int i = 0; i < 3; i++) // x_j [i]
+			dest[i][j] = conj(src[j][i]);
+}
+//======================================================================================================================
 static inline void DblMatrTrans(double dest[static 3][3], double src[static 3][3]) {
 	for (int j = 0; j < 3; j++) // A * x_j = e_j
 		for (int i = 0; i < 3; i++) // x_j [i]
@@ -880,7 +915,8 @@ static inline void DebugMatr(int n, FILE *file, doublecomplex v[][n]) {
 
 //======================================================================================================================
 static inline void MatrRoot(doublecomplex M[static 3][3], doublecomplex lambda[static 3], doublecomplex Mroot[static 3][3]) {
-	/*Implements Sylvester's method to compute the principal square root of a matrix as f(M)=√M*/
+	/*Implements Sylvester's interpolation method to compute the principal square root of a matrix 
+	(see p. 26 of https://doi.org/10.1137/1.9780898717778)*/
 	MatrSet(Mroot, 0);
 	doublecomplex E1[3][3] = {
 			{lambda[0],0,0},
@@ -1021,6 +1057,40 @@ static inline doublecomplex FresnelTP(const doublecomplex ki,const doublecomplex
 {
 	return 2*mr*ki/(mr*mr*ki+kt);
 }
+
+//======================================================================================================================
+
+static inline double theta3(const double a)
+/* computes the following expression: a^3(theta_3(0,exp(-pi*a^2))^3-1), where
+ * theta_3 is elliptic theta function of 3rd kind, in particular
+ * theta_3(0,exp(-pi*a^2)) = 1 + Sum[exp(-pi*a^2*k,{k,1,inf}]
+ * it obeys the following relation theta_3(0,exp(-pi*a^2)) = (1/a)*theta_3(0,exp(-pi/a^2)),
+ * see e.g. J.D. Fenton and R.S. Gardiner-Garden, "Rapidly-convergent methods for evaluating elliptic integrals and
+ * theta and elliptic functions," J. Austral. Math. Soc. B 24, 47-58 (1982).
+ * or http://en.wikipedia.org/wiki/Theta_function#Jacobi_identities
+ * so the sum need to be taken only for a>=1, then three terms are sufficient to obtain 10^-22 accuracy
+ */
+{
+	double q,q2,q3,t,a2,a3,res;
+	a2=a*a;
+	a3=a*a2;
+	if (a>=1) {
+		q=exp(-PI*a2);
+		q2=q*q;
+		q3=q*q2;
+		t=2*q*(1+q3*(1+q2*q3)); // t = 1 - theta_3(0,exp(-pi*a^2)) = 2*(q + q^4 + q^9)
+		res=a3*t*(3+t*(3+t)); // a^3*(t^3-1)
+	}
+	else { // a<1, employ transformation a->1/a
+		q=exp(-PI/a2);
+		q2=q*q;
+		q3=q*q2;
+		t=1+2*q*(1+q3*(1+q2*q3)); // t = theta_3(0,exp(-pi/a^2)) = 1+ 2*(q + q^4 + q^9)
+		res=t*t*t - a3; // a^3*(t^3-1)
+	}
+	return res;
+}
+//======================================================================================================================
 
 #ifdef USE_SSE3
 

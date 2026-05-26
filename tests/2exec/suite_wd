@@ -1,0 +1,415 @@
+# Main test suite to be used by comp2exec
+# Copyright (C) ADDA contributors
+# GNU General Public License version 3
+#
+#------------------------- Variable definitons -------------------------------------------------------------------------
+# All variable names should be enclosed in ';' and start the line - its value is assigned to the rest of the line. It
+# can be defined through other variables defined below. Each variable must be defined only once.
+
+# default for most tests
+;mgn; ;m; ;g; ;n;
+# default for two-domain particles
+;2mgn; ;2m; ;g; ;n;
+# default for three-domain particles
+;3mgn; ;3m; ;g; ;n;
+# for large computations (e.g. orientation averaging)
+;mg4n; ;m; -grid 4 ;n;
+# for testing odd grids
+;mg9n; ;m; -grid 9 ;n;
+# default addition to make particle completely non-symmetric
+;sep; ;se; ;p;
+# default for testing of different grids
+;smn; -size 8 ;m; ;n;
+# default for testing WD without volume correction
+;wd; -weighted_discr ;-no_vol_cor;
+
+# Elementary variables
+;m; -m 1.1 0.1
+;2m; -m 1.1 0.1 1.2 0.2
+;3m; -m 1.05 0.1 1.1 0.2 1.2 0.3
+;g; -grid 8
+;n; -ntheta 5
+;p; -prop 1 2 3
+;pd; -prop 0 0 -1
+;se; -shape ellipsoid 0.5 1.5
+;sob; -shape box 1 0.125
+
+#----------------------------- List of tests ---------------------------------------------------------------------------
+# The format is the following: '<list,of,files,to,compare> <cmdline>' the first one is coma-separated list of files to
+# compare or 'all' (which compares all produced files. <cmdline> is everything after the first space and it is passed
+# directly to ADDA.
+# Instead of 'all' an exclusion flags can be used - a concanetated list of '!X', where X is either an operational mode
+# or an optional flag. For example: '!ocl_seq!SPA_STAN'. The line will be skipped if any of the flags is matched,
+# otherwise it is equivalent to 'all'.
+
+all
+
+# testing of different grids - relevant for FFT methods;
+all -weighted_discr -no_vol_cor -grid 1 ;smn;
+all -weighted_discr -no_vol_cor -grid 2 ;smn;
+all -weighted_discr -no_vol_cor -grid 3 ;smn;
+all -weighted_discr -no_vol_cor -grid 4 ;smn;
+all -weighted_discr -no_vol_cor -grid 5 ;smn;
+all -weighted_discr -no_vol_cor -grid 6 ;smn;
+all -weighted_discr -no_vol_cor -grid 7 ;smn;
+all -weighted_discr -no_vol_cor -grid 8 ;smn;
+all -weighted_discr -no_vol_cor -grid 9 ;smn;
+all -weighted_discr -no_vol_cor -grid 10 ;smn;
+all -weighted_discr -no_vol_cor -grid 11 ;smn;
+all -weighted_discr -no_vol_cor -grid 12 ;smn;
+all -weighted_discr -no_vol_cor -grid 13 ;smn;
+all -weighted_discr -no_vol_cor -grid 14 ;smn;
+all -weighted_discr -no_vol_cor -grid 15 ;smn;
+all -weighted_discr -no_vol_cor -grid 16 ;smn;
+all -weighted_discr -no_vol_cor -grid 17 ;smn;
+all -weighted_discr -no_vol_cor -grid 18 ;smn;
+all -weighted_discr -no_vol_cor -grid 19 ;smn;
+all -weighted_discr -no_vol_cor -grid 20 ;smn;
+
+all -weighted_discr -no_vol_cor -h alldir_inp
+all -weighted_discr -no_vol_cor -alldir_inp adp.dat -Csca ;mgn;
+
+# all -weighted_discr -no_vol_cor -h anisotr
+# all -weighted_discr -no_vol_cor -anisotr ;3m; ;g; ;n;
+
+# all -weighted_discr -no_vol_cor -h asym
+# all -weighted_discr -no_vol_cor -asym ;sep; ;mgn;
+
+all -weighted_discr -no_vol_cor -h beam
+all -weighted_discr -no_vol_cor -h beam plane
+all -weighted_discr -no_vol_cor -beam plane ;mgn;
+all -weighted_discr -no_vol_cor -h beam lminus
+all -weighted_discr -no_vol_cor -beam lminus 2 -beam_center 1 2 3 ;mgn;
+all -weighted_discr -no_vol_cor -h beam davis3
+all -weighted_discr -no_vol_cor -beam davis3 2 -beam_center 1 2 3 ;mgn;
+all -weighted_discr -no_vol_cor -beam davis3 2 ;mg9n;
+all -weighted_discr -no_vol_cor -h beam barton5
+all -weighted_discr -no_vol_cor -beam barton5 2 -beam_center 1 2 3 ;mgn;
+all -weighted_discr -no_vol_cor -beam barton5 2 ;mg9n;
+all -weighted_discr -no_vol_cor -beam dipole -beam_center 3 2 1 ;p; ;mgn;
+all -weighted_discr -no_vol_cor -h beam read
+# all -weighted_discr -no_vol_cor -beam read IncBeam-Y IncBeam-X ;se; ;mgn;
+
+all -weighted_discr -no_vol_cor -h chpoint
+all -weighted_discr -no_vol_cor -chpoint 1s -eps 3 ;mgn;
+all -weighted_discr -no_vol_cor -h chp_type
+all -weighted_discr -no_vol_cor -chp_type normal -chpoint 1s -eps 3 ;mgn;
+all -weighted_discr -no_vol_cor -chp_dir chp_tmp -chp_type regular -chpoint 1s -eps 3 ;mgn;
+all -weighted_discr -no_vol_cor -h chp_dir
+all -weighted_discr -no_vol_cor -chp_dir chp_tmp -chp_type always -eps 3 ;mgn;
+all -weighted_discr -no_vol_cor -h chp_load
+!mpi_seq -weighted_discr -no_vol_cor -chp_dir chp_tmp -chp_load ;mgn;
+
+all -weighted_discr -no_vol_cor -h Cpr
+all -weighted_discr -no_vol_cor -Cpr ;mgn;
+# all -weighted_discr -no_vol_cor -Cpr ;sep; ;mgn;
+
+# all -weighted_discr -no_vol_cor -h Csca
+# all -weighted_discr -no_vol_cor -Csca ;se; ;mgn;
+
+all -weighted_discr -no_vol_cor -h dir
+
+all -weighted_discr -no_vol_cor -h dpl
+all -weighted_discr -no_vol_cor -dpl 20 ;mgn;
+
+all -weighted_discr -no_vol_cor -h eps
+all -weighted_discr -no_vol_cor -eps 10 ;mgn;
+
+all -weighted_discr -no_vol_cor -h eq_rad
+all -weighted_discr -no_vol_cor -eq_rad 1 ;mgn;
+
+# It is hard to make meaningful comparison of stdout and log for random placement of granules. However, optical
+# properties are compared using rather large tolerances
+# all -weighted_discr -no_vol_cor -h granul
+# CrossSec-Y,CrossSec-X,mueller -granul 0.2 0.5 2 -size 8 -shape coated 0.5 ;3m; ;n;
+# CrossSec-Y,CrossSec-X,mueller -granul 0.2 2 2 -size 8 -shape coated 0.5 ;3m; ;n;
+
+all -weighted_discr -no_vol_cor -h grid
+all -weighted_discr -no_vol_cor -grid 4 6 8 ;m; ;n;
+# all -weighted_discr -no_vol_cor -grid 10 10 10 -shape read sphere.geom -sym enf ;m; ;n;
+
+!ocl_seq -weighted_discr -no_vol_cor -h
+all -weighted_discr -no_vol_cor -h h
+
+all -weighted_discr -no_vol_cor -h init_field
+all -weighted_discr -no_vol_cor -init_field auto ;mgn;
+all -weighted_discr -no_vol_cor -init_field inc ;mgn;
+# all -weighted_discr -no_vol_cor -init_field read IncBeam-Y IncBeam-X ;se; ;mgn;
+all -weighted_discr -no_vol_cor -init_field wkb ;mgn;
+all -weighted_discr -no_vol_cor -init_field zero ;mgn;
+
+all -weighted_discr -no_vol_cor -h int
+all -weighted_discr -no_vol_cor -int fcd ;mgn;
+all -weighted_discr -no_vol_cor -int fcd_st ;mgn;
+all -weighted_discr -no_vol_cor -int igt ;mgn;
+all -weighted_discr -no_vol_cor -int igt 3 ;mg4n;
+all -weighted_discr -no_vol_cor -int igt 3 0.01 ;mgn;
+all -weighted_discr -no_vol_cor -int igt_so ;mgn;
+all -weighted_discr -no_vol_cor -int nloc 0.1 ;mgn;
+all -weighted_discr -no_vol_cor -int nloc 1 ;mgn;
+all -weighted_discr -no_vol_cor -int nloc_av 0.1 ;mgn;
+all -weighted_discr -no_vol_cor -int nloc_av 1 ;mgn;
+all -weighted_discr -no_vol_cor -int poi ;mgn;
+
+all -weighted_discr -no_vol_cor -h int_surf
+all -weighted_discr -no_vol_cor -int_surf img -surf 4 2 0 ;mgn;
+all -weighted_discr -no_vol_cor -int_surf som -surf 4 2 0 ;mgn;
+
+all -weighted_discr -no_vol_cor -h iter
+all -weighted_discr -no_vol_cor -iter bcgs2 ;mgn;
+all -weighted_discr -no_vol_cor -iter bicg ;mgn;
+all -weighted_discr -no_vol_cor -iter bicgstab ;mgn;
+all -weighted_discr -no_vol_cor -iter cgnr ;mgn;
+all -weighted_discr -no_vol_cor -iter csym ;mgn;
+all -weighted_discr -no_vol_cor -iter qmr ;mgn;
+all -weighted_discr -no_vol_cor -iter qmr2 ;mgn;
+
+all -weighted_discr -no_vol_cor -h jagged
+all -weighted_discr -no_vol_cor -jagged 2 ;mg4n;
+
+all -weighted_discr -no_vol_cor -h lambda
+all -weighted_discr -no_vol_cor -lambda 1 ;mgn;
+
+all -weighted_discr -no_vol_cor -h m
+all -weighted_discr -no_vol_cor -m 1.2 0.2 ;g; ;n;
+
+all -weighted_discr -no_vol_cor -h maxiter
+all -weighted_discr -no_vol_cor -maxiter 5 ;mgn;
+
+all -weighted_discr -no_vol_cor -h no_reduced_fft
+all -weighted_discr -no_vol_cor -no_reduced_fft ;mgn;
+!mpi!mpi_seq -weighted_discr -no_vol_cor -no_reduced_fft -iter cgnr ;mgn;
+
+# all -weighted_discr -no_vol_cor -h no_vol_cor
+# all -weighted_discr -no_vol_cor -no_vol_cor -size 3 ;mgn;
+
+all -weighted_discr -no_vol_cor -h ntheta
+all -weighted_discr -no_vol_cor -ntheta 10 ;m; ;g;
+
+all -weighted_discr -no_vol_cor -h opt
+all -weighted_discr -no_vol_cor -opt speed ;mgn;
+all -weighted_discr -no_vol_cor -opt mem ;mgn;
+
+all -weighted_discr -no_vol_cor -h orient
+all -weighted_discr -no_vol_cor -orient 30 0 0 ;mgn;
+# all -weighted_discr -no_vol_cor -orient 10 20 30 ;sep; ;mgn; -scat_matr both
+# all -weighted_discr -no_vol_cor -orient avg ;se; ;mg4n;
+# all -weighted_discr -no_vol_cor -orient avg ap.dat ;se; ;mg4n;
+
+# all -weighted_discr -no_vol_cor -h phi_integr
+# all -weighted_discr -no_vol_cor -phi_integr 31 ;sep; ;mgn;
+
+all -weighted_discr -no_vol_cor -h pol
+all -weighted_discr -no_vol_cor -pol cldr ;p; ;mgn;
+all -weighted_discr -no_vol_cor -pol cm ;mgn;
+all -weighted_discr -no_vol_cor -pol dgf ;mgn;
+all -weighted_discr -no_vol_cor -pol fcd ;mgn;
+all -weighted_discr -no_vol_cor -pol igt_so ;mgn;
+all -weighted_discr -no_vol_cor -pol lak ;mgn;
+all -weighted_discr -no_vol_cor -pol ldr ;p; ;mgn;
+all -weighted_discr -no_vol_cor -pol ldr avgpol ;p; ;mgn;
+all -weighted_discr -no_vol_cor -pol nloc 0.1 ;mgn;
+all -weighted_discr -no_vol_cor -pol nloc 1 ;mgn;
+all -weighted_discr -no_vol_cor -pol nloc_av 0.1 ;mgn;
+all -weighted_discr -no_vol_cor -pol nloc_av 1 ;mgn;
+all -weighted_discr -no_vol_cor -pol rrc ;mgn;
+
+all -weighted_discr -no_vol_cor -h prognosis
+all -weighted_discr -no_vol_cor -prognosis
+
+all -weighted_discr -no_vol_cor -h prop
+# all -weighted_discr -no_vol_cor -prop 5 1 3 ;se; ;mgn;
+all -weighted_discr -no_vol_cor -prop 0 0 -1 ;mgn;
+all -weighted_discr -no_vol_cor -prop 1 0 0 ;mgn;
+all -weighted_discr -no_vol_cor -prop 0 1 0 ;mgn;
+
+all -weighted_discr -no_vol_cor -h recalc_resid
+all -weighted_discr -no_vol_cor -recalc_resid ;mgn;
+
+# Rectangular dipoles; first round of tests are for hard-wired CLDR values
+# all -weighted_discr -no_vol_cor -h rect_dip
+# all -weighted_discr -no_vol_cor -rect_dip 1 1 1 ;mgn;
+# all -weighted_discr -no_vol_cor -rect_dip 1 1 1.5 ;mgn;
+# all -weighted_discr -no_vol_cor -rect_dip 1 1.5 1 ;mgn;
+# all -weighted_discr -no_vol_cor -rect_dip 1.5 1 1 ;mgn;
+# all -weighted_discr -no_vol_cor -rect_dip 1 1.5 1.5 ;mgn;
+# all -weighted_discr -no_vol_cor -rect_dip 1.5 1 1.5 ;mgn;
+# all -weighted_discr -no_vol_cor -rect_dip 1.5 1.5 1 ;mgn;
+# all -weighted_discr -no_vol_cor -rect_dip 1 1 2 ;mgn;
+# all -weighted_discr -no_vol_cor -rect_dip 1 2 1 ;mgn;
+# all -weighted_discr -no_vol_cor -rect_dip 2 1 1 ;mgn;
+# all -weighted_discr -no_vol_cor -rect_dip 1 1.5 2 ;mgn;
+# all -weighted_discr -no_vol_cor -rect_dip 1 2 1.5 ;mgn;
+# all -weighted_discr -no_vol_cor -rect_dip 1.5 1 2 ;mgn;
+# all -weighted_discr -no_vol_cor -rect_dip 1.5 2 1 ;mgn;
+# all -weighted_discr -no_vol_cor -rect_dip 2 1 1.5 ;mgn;
+# all -weighted_discr -no_vol_cor -rect_dip 2 1.5 1 ;mgn;
+# all -weighted_discr -no_vol_cor -rect_dip 1 2 2 ;mgn;
+# all -weighted_discr -no_vol_cor -rect_dip 2 1 2 ;mgn;
+# all -weighted_discr -no_vol_cor -rect_dip 2 2 1 ;mgn;
+# all -weighted_discr -no_vol_cor -rect_dip 1 1 3 ;mgn;
+# all -weighted_discr -no_vol_cor -rect_dip 1 3 1 ;mgn;
+# all -weighted_discr -no_vol_cor -rect_dip 3 1 1 ;mgn;
+# all -weighted_discr -no_vol_cor -rect_dip 1 1.5 3 ;mgn;
+# all -weighted_discr -no_vol_cor -rect_dip 1 3 1.5 ;mgn;
+# all -weighted_discr -no_vol_cor -rect_dip 1.5 1 3 ;mgn;
+# all -weighted_discr -no_vol_cor -rect_dip 1.5 3 1 ;mgn;
+# all -weighted_discr -no_vol_cor -rect_dip 3 1 1.5 ;mgn;
+# all -weighted_discr -no_vol_cor -rect_dip 3 1.5 1 ;mgn;
+# all -weighted_discr -no_vol_cor -rect_dip 1 2 3 ;mgn;
+# all -weighted_discr -no_vol_cor -rect_dip 1 3 2 ;mgn;
+# all -weighted_discr -no_vol_cor -rect_dip 2 1 3 ;mgn;
+# all -weighted_discr -no_vol_cor -rect_dip 2 3 1 ;mgn;
+# all -weighted_discr -no_vol_cor -rect_dip 3 1 2 ;mgn;
+# all -weighted_discr -no_vol_cor -rect_dip 3 2 1 ;mgn;
+# all -weighted_discr -no_vol_cor -rect_dip 1 3 3 ;mgn;
+# all -weighted_discr -no_vol_cor -rect_dip 3 1 3 ;mgn;
+# all -weighted_discr -no_vol_cor -rect_dip 3 3 1 ;mgn;
+# # second, nontrivial combinations with other parameters
+# all -weighted_discr -no_vol_cor -rect_dip 2 2 3 ;mgn;
+# all -weighted_discr -no_vol_cor -rect_dip 1 1 1.4 -pol igt_so -int igt 3 ;sep; ;mgn;
+# all -weighted_discr -no_vol_cor -rect_dip 1 2 1 -pol cldr ;sep; ;mgn;
+# all -weighted_discr -no_vol_cor -rect_dip 2 1 1 -pol cm ;sep; ;mgn;
+# all -weighted_discr -no_vol_cor -rect_dip 1 1 0.01 -int igt 3 -pol igt_so -shape box 1 0.001 -size 5 -grid 20 ;n;
+# all -weighted_discr -no_vol_cor -rect_dip 1 2 1 -surf 4 inf -prop 1 2 -3 ;mgn;
+# all -weighted_discr -no_vol_cor -rect_dip 2 1 1 -surf 4 inf -prop 1 2 -3 ;mgn;
+
+# all -weighted_discr -no_vol_cor -h save_geom
+# all -weighted_discr -no_vol_cor -save_geom -shape coated 0.4 0.1 0.15 0.2 -prognosis
+# all -weighted_discr -no_vol_cor -h sg_format
+# all -weighted_discr -no_vol_cor -save_geom -shape ellipsoid 0.5 0.25 -prognosis -sg_format text
+# all -weighted_discr -no_vol_cor -save_geom -shape ellipsoid 0.5 0.25 -prognosis -sg_format text_ext
+# all -weighted_discr -no_vol_cor -save_geom -shape ellipsoid 0.5 0.25 -prognosis -sg_format ddscat6
+# all -weighted_discr -no_vol_cor -save_geom -shape ellipsoid 0.5 0.25 -prognosis -sg_format ddscat7
+
+all -weighted_discr -no_vol_cor -h scat
+all -weighted_discr -no_vol_cor -scat dr ;mgn;
+all -weighted_discr -no_vol_cor -scat fin ;mgn;
+all -weighted_discr -no_vol_cor -scat igt_so ;mgn;
+
+all -weighted_discr -no_vol_cor -h scat_grid_inp
+all -weighted_discr -no_vol_cor -scat_grid_inp sp.dat ;mgn;
+
+all -weighted_discr -no_vol_cor -h scat_matr
+all -weighted_discr -no_vol_cor -scat_matr muel ;mgn;
+all -weighted_discr -no_vol_cor -scat_matr ampl ;mgn;
+all -weighted_discr -no_vol_cor -scat_matr both ;mgn;
+all -weighted_discr -no_vol_cor -scat_matr none ;m; ;g;
+
+# all -weighted_discr -no_vol_cor -h scat_plane
+# all -weighted_discr -no_vol_cor -scat_plane ;se; ;mgn;
+
+all -weighted_discr -no_vol_cor -h shape
+# all -weighted_discr -no_vol_cor -h shape axisymmetric
+# all -weighted_discr -no_vol_cor -shape axisymmetric 196.txt ;mgn;
+# all -weighted_discr -no_vol_cor -shape axisymmetric axis.txt ;mgn;
+# all -weighted_discr -no_vol_cor -h shape bicoated
+# all -weighted_discr -no_vol_cor -shape bicoated 3 0.5 ;2mgn;
+# all -weighted_discr -no_vol_cor -h shape biellipsoid
+# all -weighted_discr -no_vol_cor -shape biellipsoid 0.5 1.5 1.5 0.5 1.5 ;2mgn;
+# all -weighted_discr -no_vol_cor -h shape bisphere
+# all -weighted_discr -no_vol_cor -shape bisphere 2 ;mgn;
+all -weighted_discr -no_vol_cor -h shape box
+all -weighted_discr -no_vol_cor -shape box ;mgn;
+# all -weighted_discr -no_vol_cor -shape box 0.5 1.5 ;mgn;
+# all -weighted_discr -no_vol_cor -shape box 1.51 1.92 -grid 7 ;m; ;n;
+# all -weighted_discr -no_vol_cor -h shape capsule
+# all -weighted_discr -no_vol_cor -shape capsule 1.5 ;mgn;
+# all -weighted_discr -no_vol_cor -h shape chebyshev
+# all -weighted_discr -no_vol_cor -shape chebyshev 0.3 5 ;mgn;
+# all -weighted_discr -no_vol_cor -h shape coated
+# all -weighted_discr -no_vol_cor -shape coated 0.5 ;2mgn;
+# all -weighted_discr -no_vol_cor -shape coated 0.4 0.1 0.15 0.2 ;2mgn;
+# all -weighted_discr -no_vol_cor -h shape coated2
+# all -weighted_discr -no_vol_cor -shape coated2 0.7 0.4 ;3mgn;
+all -weighted_discr -no_vol_cor -h shape cylinder
+all -weighted_discr -no_vol_cor -shape cylinder 1 ;mgn;
+# all -weighted_discr -no_vol_cor -h shape egg
+# all -weighted_discr -no_vol_cor -shape egg 0.5 0.2 ;mgn;
+# all -weighted_discr -no_vol_cor -h shape ellipsoid
+# all -weighted_discr -no_vol_cor -shape ellipsoid 0.25 2 ;mgn;
+# all -weighted_discr -no_vol_cor -h shape line
+# all -weighted_discr -no_vol_cor -shape line -grid 16 ;m; ;n;
+# all -weighted_discr -no_vol_cor -shape line -grid 8 2 3 ;m; ;n;
+# all -weighted_discr -no_vol_cor -h shape onion
+# all -weighted_discr -no_vol_cor -shape onion 0.7 0.4 ;3mgn;
+# all -weighted_discr -no_vol_cor -h shape onion_ell
+# all -weighted_discr -no_vol_cor -shape onion_ell 0.25 2 0.7 0.4 ;3mgn;
+# all -weighted_discr -no_vol_cor -h shape plate
+# all -weighted_discr -no_vol_cor -shape plate 0.5 ;mgn;
+# all -weighted_discr -no_vol_cor -h shape prism
+# all -weighted_discr -no_vol_cor -shape prism 5 1.5 ;mgn;
+# all -weighted_discr -no_vol_cor -h shape rbc
+# all -weighted_discr -no_vol_cor -shape rbc 0.3 0.1 0.3 ;mgn;
+# all -weighted_discr -no_vol_cor -h shape read
+# all -weighted_discr -no_vol_cor -shape read ellipsoid.geom ;m; ;n;
+# all -weighted_discr -no_vol_cor -shape read coated.geom ;2m; ;n;
+# all -weighted_discr -no_vol_cor -shape read ell_ddscat6.dat ;m; ;n;
+# all -weighted_discr -no_vol_cor -shape read ell_ddscat7.dat ;m; ;n;
+all -weighted_discr -no_vol_cor -h shape sphere
+all -weighted_discr -no_vol_cor -shape sphere ;mgn;
+# all -weighted_discr -no_vol_cor -h shape spherebox
+# all -weighted_discr -no_vol_cor -shape spherebox 0.5 ;2mgn;
+# all -weighted_discr -no_vol_cor -h shape superellipsoid
+# all -weighted_discr -no_vol_cor -shape superellipsoid 0.5 0.75 0.5 1.5 ;mgn;
+
+all -weighted_discr -no_vol_cor -h size
+all -weighted_discr -no_vol_cor -size 8 ;mgn;
+
+all -weighted_discr -no_vol_cor -h so_buf
+all -weighted_discr -no_vol_cor -so_buf no ;mgn;
+all -weighted_discr -no_vol_cor -so_buf line ;mgn;
+all -weighted_discr -no_vol_cor -so_buf full ;mgn;
+
+# all -weighted_discr -no_vol_cor -h store_beam
+# all -weighted_discr -no_vol_cor -store_beam ;se; ;mgn;
+
+# all -weighted_discr -no_vol_cor -h store_dip_pol
+# all -weighted_discr -no_vol_cor -store_dip_pol ;se; ;mgn;
+
+# all -weighted_discr -no_vol_cor -h store_force
+# all -weighted_discr -no_vol_cor -store_force ;sep; ;mgn;
+
+# all -weighted_discr -no_vol_cor -h store_grans
+# granules -store_grans -granul 0.2 1 -size 4 ;2mgn;
+
+# all -weighted_discr -no_vol_cor -h store_int_field
+# all -weighted_discr -no_vol_cor -store_int_field ;se; ;mgn;
+
+# all -weighted_discr -no_vol_cor -h store_scat_grid
+# all -weighted_discr -no_vol_cor -store_scat_grid ;sep; ;mgn;
+
+all -weighted_discr -no_vol_cor -h surf
+all -weighted_discr -no_vol_cor -surf 4 2 0 ;mgn;
+all -weighted_discr -no_vol_cor -surf 4 3 4 ;p; ;mgn;
+# all -weighted_discr -no_vol_cor -surf 4 3 4 -prop 1 2 -3 ;se; ;mgn;
+# all -weighted_discr -no_vol_cor -surf 4 inf -prop 1 2 -3 ;se; ;mgn;
+all -weighted_discr -no_vol_cor -surf 4 2 1 -beam dipole -beam_center 3 2 1 ;p; ;mgn;
+all -weighted_discr -no_vol_cor -surf 4 inf -beam dipole -beam_center 3 2 1 ;p; ;mgn;
+all -weighted_discr -no_vol_cor -surf 4 2 0 -no_reduced_fft ;mgn;
+!mpi,!mpi_seq -weighted_discr -no_vol_cor -surf 4 2 0 -iter cgnr -no_reduced_fft ;mgn;
+CrossSec-Y,log,stdout -weighted_discr -no_vol_cor -surf 4 5 2 ;pd; ;mgn;
+# all -weighted_discr -no_vol_cor -surf 0.5 0.9 4 ;sob; ;pd; ;mgn;
+# all -weighted_discr -no_vol_cor -surf 0.5 0.1 1.1 ;sob; ;pd; ;mgn;
+# all -weighted_discr -no_vol_cor -surf 0.5 0.1 0 ;sob; ;pd; ;mgn;
+# all -weighted_discr -no_vol_cor -surf 4 2 1 -shape box 1 20 -size 0.04 -grid 1 ;pd; ;m; ;n; 
+
+all -weighted_discr -no_vol_cor -h sym
+all -weighted_discr -no_vol_cor -sym auto ;mgn;
+all -weighted_discr -no_vol_cor -sym no ;mgn;
+all -weighted_discr -no_vol_cor -sym enf ;mgn;
+# all -weighted_discr -no_vol_cor -sym auto ;sep; ;mgn;
+# all -weighted_discr -no_vol_cor -sym no ;sep; ;mgn;
+# all -weighted_discr -no_vol_cor -sym enf ;sep; ;mgn;
+
+all -weighted_discr -no_vol_cor -h test
+all -weighted_discr -no_vol_cor -test ;mgn;
+
+all -weighted_discr -no_vol_cor -h V
+!mpi_seq!ocl_seq!SPA_STAN -weighted_discr -no_vol_cor -V
+
+# all -weighted_discr -no_vol_cor -h vec
+# all -weighted_discr -no_vol_cor -vec ;sep; ;mgn;
+
+all -weighted_discr -no_vol_cor -h yz
+all -weighted_discr -no_vol_cor -yz -store_scat_grid ;mgn;

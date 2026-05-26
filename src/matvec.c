@@ -1,5 +1,6 @@
 /* Calculate local matrix vector product of decomposed interaction matrix with r_k or p_k, using a FFT-based convolution
  * algorithm. Also contains code for SPARSE (non-FFT) mode.
+ * Should not be used with OPENCL mode, but IDE syntax checking works fine even in this mode.
  *
  * Copyright (C) ADDA contributors
  * This file is part of ADDA.
@@ -85,7 +86,7 @@ static inline size_t IndexXmatrix(const size_t x,const size_t y,const size_t z)
 
 static inline size_t IndexDmatrix_mv(size_t x,size_t y,size_t z,const bool transposed)
 {
-	if (transposed) { // used only for G_SO
+	if (transposed) { // almost never happens
 		/* reflection along the x-axis can't work in parallel mode, since the corresponding values are generally stored
 		 * on a different processor. A rearrangement of memory distribution is required to remove this limitation.
 		 */
@@ -105,7 +106,7 @@ static inline size_t IndexDmatrix_mv(size_t x,size_t y,size_t z,const bool trans
 
 static inline size_t IndexRmatrix_mv(size_t x,size_t y,size_t z,const bool transposed)
 {
-	if (transposed) { // used only for G_SO !!!
+	if (transposed) { // almost never happens
 		/* reflection along the x-axis can't work in parallel mode, since the corresponding values are generally stored
 		 * on a different processor. A rearrangement of memory distribution is required to remove this limitation.
 		 */
@@ -157,17 +158,17 @@ void MatVec (doublecomplex * restrict argvec,    // the argument vector
 	 * A(H).x = x + (S(T).D(T).S(T).x(*))(*)
 	 * C,S - diagonal => symmetric
 	 * (!! will change if tensor (non-diagonal) polarizability is used !!)
-	 * D - symmetric (except for G_SO)
+	 * D - symmetric except for interactions which break the reciprocity of the Green's tensor (none currently)
 	 *
 	 * D.x=F(-1)(F(D).F(X))
 	 * F(D) is just a vector
 	 *
-	 * G_SO: F(D(T)) (k) =  F(D) (-k)
+	 * If D is non-symmetric one can use F(D(T)) (k) =  F(D) (-k)
 	 *       k - vector index
 	 *
 	 * For reflected matrix the situation is similar.
 	 * R.x=F(-1)(F(R).H(X)), where R is a vector, similar with G, where R[i,j,k=0] is for interaction of two bottom
-	 * dipoles. H(X) is FxFy(Fz^(-1)(X)), where Fx,... are Fourier transforms along corresponding coordinates. It can be
+	 * voxels. H(X) is FxFy(Fz^(-1)(X)), where Fx,... are Fourier transforms along corresponding coordinates. It can be
 	 * computed along with F(X).
 	 * Matrix R is symmetric (as a whole), but not in small parts, so R(i,j)=R(j,i)(T). Hence, in contrast to D, for
 	 * 'transpose' actual transpose (changing sign of a few elements) of 3x3 submatrix is required along with addressing
@@ -206,12 +207,11 @@ void MatVec (doublecomplex * restrict argvec,    // the argument vector
 		mat=material[i];
 		index=IndexXmatrix(position[j],position[j+1],position[j+2]);
 		/*Xmat stores components of β'x for all the voxels as Xmat[i][j]=(βi'xi)[j] : A=I+S.D.Xmat*/
-		if (use_wd){
+		if (use_wd||use_ema){
 			doublecomplex matrix[3][3], matrixT[3][3];
 			doublecomplex result[3];
 			MatrSet(matrix,0);
 			if(volfrac[i]<1.0) for (int k=0; k<3; k++) for (int l=0; l<3; l++) matrix[k][l]=sqrtCC[9*i+k+3*l];
-			else if(anisotropy) for (int l=0; l<3; l++) matrix[l][l]=sqrtCC[9*i+4*l];
 			else for (int l=0; l<3; l++) matrix[l][l]=sqrtCC[9*i];
 			MatrTrans(matrixT, matrix);
 			MatrVecMul(3,matrixT,argvec+j,result); //β'x
@@ -363,18 +363,17 @@ void MatVec (doublecomplex * restrict argvec,    // the argument vector
 		mat=material[i];
 		index=IndexXmatrix(position[j],position[j+1],position[j+2]);
 		/*Direct and inverse FFTs have been done as Ymat=F{D}*F{Xmat}->F{Xmat}, Xmat->D.Xmat=D.(S.x) : Ax = x + S.Xmat*/
-		if (use_wd){
+		if (use_wd||use_ema){
 			doublecomplex matrix[3][3], matrixT[3][3];
 			doublecomplex result[3],vec[3];
 			MatrSet(matrix,0);
 			if(volfrac[i]<1.0) for (int k=0; k<3; k++) for (int l=0; l<3; l++) matrix[k][l]=sqrtCC[9*i+k+3*l];
-			else if(anisotropy) for (int l=0; l<3; l++) matrix[l][l]=sqrtCC[9*i+4*l];
 			else for (int l=0; l<3; l++) matrix[l][l]=sqrtCC[9*i];
 			for (Xcomp=0;Xcomp<3;Xcomp++) vec[Xcomp]=Xmatrix[index+Xcomp*local_Nsmall];
 			MatrVecMul(3,matrix,vec,result); //β.(D.β'x)
 			for (Xcomp=0;Xcomp<3;Xcomp++) resultvec[j+Xcomp]=argvec[j+Xcomp]+result[Xcomp];
 		}
-		else for (Xcomp=0;Xcomp<3;Xcomp++) resultvec[j+Xcomp]=argvec[j+Xcomp]+cc_sqrt[mat][Xcomp]*Xmatrix[index+Xcomp*local_Nsmall];
+		else for (Xcomp=0;Xcomp<3;Xcomp++) resultvec[j+Xcomp]=argvec[j+Xcomp]+cc_sqrt[mat][Xcomp]*Xmatrix[index+Xcomp*local_Nsmall]; // result=argvec+cc_sqrt*Xmat
 		// norm is unaffected by conjugation, hence can be computed here
 		if (ipr) *inprod+=cvNorm2(resultvec+j);
 	}
@@ -460,7 +459,6 @@ void MatVec (doublecomplex * restrict argvec,    // the argument vector
 {
 	const bool ipr = (inprod != NULL);
 	size_t i,j,i3;
-
 	TIME_TYPE tstart=GET_TIME();
 	if (her) nConj(argvec);
 	// TODO: can be replaced by nMult_mat

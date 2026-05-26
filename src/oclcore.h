@@ -20,8 +20,8 @@
 // project headers
 #include "function.h"
 #include "io.h"
-#include <stdbool.h> // for bool
 // system headers
+#include <stdbool.h> // for bool
 // we have been mostly testing against this version (and it corresponds to clFFT 2.12.2), but require only 1.0 below
 #define CL_TARGET_OPENCL_VERSION 120
 #ifdef __APPLE__
@@ -41,7 +41,7 @@ extern bool bufupload;
 extern cl_command_queue command_queue;
 extern cl_kernel clzero,clarith1,clarith2,clarith3,clarith3_surface,clarith4,clarith5,clnConj,clinprod,cltransposeof,
 	cltransposeob,cltransposeofR;
-extern cl_mem bufXmatrix,bufmaterial,bufposition,bufsqrtCC,bufargvec,bufresultvec,bufslices,bufslices_tr,bufDmatrix,
+extern cl_mem bufXmatrix,bufmaterial,bufposition,bufvolfrac,bufsqrtCC,bufcc_sqrt,bufargvec,bufresultvec,bufslices,bufslices_tr,bufDmatrix,
 	bufinproduct;
 #ifdef OCL_BLAS
 extern cl_mem buftmp,bufrvec,bufxvec;

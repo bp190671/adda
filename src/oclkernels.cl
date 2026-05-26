@@ -101,6 +101,31 @@ __kernel void arith1(__global const uchar *material,__global const ushort *posit
 }
 
 //======================================================================================================================
+
+__kernel void arith1_wd(__global const uchar *material,__global const ushort *position,__global double2 *sqrtCC,
+  __global const double2 *argvec,__global double2 *Xmatrix,const in_sizet local_Nsmall,const in_sizet smallY,
+  const in_sizet gridX,__global const double *volfrac)
+{
+    const size_t id = get_global_id(0);
+    const size_t j = 3 * id;
+    const uchar mat = material[id];
+    size_t index = ((position[j+2]*smallY + position[j+1]) * gridX + position[j]);
+    double2 result[3] = {0.0, 0.0, 0.0};
+    for (int row = 0; row < 3; row++) {
+        for (int col = 0; col < 3; col++) {
+						double2 a;
+            if (volfrac[id] < 1.0) a = sqrtCC[id*9 + col + 3*row];
+						else a = (row == col) ? sqrtCC[id*9] : (double2)(0.0, 0.0);
+            double2 b = argvec[j + col];
+            result[row].s0 += a.s0*b.s0 - a.s1*b.s1;
+            result[row].s1 += a.s1*b.s0 + a.s0*b.s1;
+        }
+    }
+    for (int xcomp = 0; xcomp < 3; xcomp++)
+        Xmatrix[index + xcomp * local_Nsmall] = result[xcomp];
+}
+
+//======================================================================================================================
 // Arith2 kernel
 
 __kernel void arith2(__global const double2 *Xmatrix,__global double2 *slices,const in_sizet gridZ,
@@ -397,6 +422,34 @@ __kernel void arith5(__global const uchar *material,__global const ushort *posit
 		cMult2(&cc_sqrt[mat*3+xcomp],&Xmatrix[index+xcomp*local_Nsmall],&temp);
 		resultvec[j+xcomp]=argvec[j+xcomp]+temp;
 	}
+}
+
+//======================================================================================================================
+
+__kernel void arith5_wd(__global const uchar *material,__global const ushort *position,__global double2 *sqrtCC,
+  __global const double2 *argvec,__global const double2 *Xmatrix,const in_sizet local_Nsmall,const in_sizet smallY,
+  const in_sizet gridX,__global double2 *resultvec,__global const double *volfrac)
+{
+    const size_t id = get_global_id(0);
+    const size_t j = 3 * id;
+    const uchar mat = material[id];
+    size_t index = ((position[j+2]*smallY + position[j+1]) * gridX + position[j]);
+    double2 vec[3];
+    for (int i=0;i<3;i++)
+        vec[i] = Xmatrix[index + i*local_Nsmall];
+    double2 result[3] = {0.0, 0.0, 0.0};
+    for (int row = 0; row < 3; row++) {
+        for (int col = 0; col < 3; col++) {
+						double2 a;
+            if (volfrac[id] < 1.0) a = sqrtCC[id*9 + row + 3*col];
+						else a = (row == col) ? sqrtCC[id*9] : (double2)(0.0, 0.0);
+            double2 b = vec[col];
+            result[row].s0 += a.s0*b.s0 - a.s1*b.s1;
+            result[row].s1 += a.s1*b.s0 + a.s0*b.s1;
+        }
+    }
+    for (int i=0;i<3;i++)
+        resultvec[j+i] = argvec[j+i] + result[i];
 }
 
 //======================================================================================================================

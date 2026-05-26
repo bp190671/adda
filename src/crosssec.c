@@ -40,9 +40,6 @@ extern const doublecomplex cc[][3];
 #ifndef SPARSE
 extern doublecomplex * restrict expsX,* restrict expsY,* restrict expsZ;
 #endif
-// defined and initialized in GenerateB.c
-extern const double beam_center_0[3];
-//extern doublecomplex eIncRefl[3],eIncTran[3];
 // defined and initialized in param.c
 extern const double incPolX_0[3],incPolY_0[3];
 extern const enum scat ScatRelation;
@@ -143,14 +140,13 @@ static void ReadLineStart(FILE *  restrict file,                  // opened file
                           const char * restrict start)            // beginning of the line to search
 // reads the first line that starts with 'start'
 {
-	while (!feof(file)) {
-		fgets(buf,buf_size,file);
+	while (fgets(buf,buf_size,file)!=NULL) {
 		if (strstr(buf,start)==buf) { // if correct beginning
 			if (strstr(buf,"\n")==NULL && !feof(file))
 				LogError(ONE_POS,"Buffer overflow while reading '%s' (size of essential line > %d)",fname,buf_size-1);
 			else return; // line found and fits into buffer
 		} // finish reading unmatched line
-		else while (strstr(buf,"\n")==NULL && !feof(file)) fgets(buf,buf_size,file);
+		else while (strstr(buf,"\n")==NULL && fgets(buf,buf_size,file)!=NULL) continue;
 	}
 	LogError(ONE_POS,"String '%s' is not found (in correct place) in file '%s'",start,fname);
 }
@@ -219,7 +215,7 @@ static inline void ScanString(FILE * restrict file,const char * restrict fname,c
  */
 {
 	ReadLineStart(file,fname,buf,buf_size,start);
-	if (sscanf(buf+strlen(start),"%s",res)!=1)
+	if (sscanf(buf+strlen(start),"%s",res)!=1) // @suppress("Format String Vulnerability")
 		LogError(ONE_POS,"Error reading value after '%s' in file '%s'",start,fname);
 	/* More secure would be to put field width in format string above (like "%.Ns"), however this field width is
 	 * defined by the variable buf_size. The latter can only be implemented by a preliminary printf to get a format
@@ -339,7 +335,8 @@ static enum angleset ScanAngleSet(
 	else if (strcmp(temp,"values")==0) {
 		ReadLineStart(file,fname,buf,buf_size,"values=");
 		for (i=0;i<a->N;i++) {
-			fgets(buf,buf_size,file);
+			if (fgets(buf,buf_size,file)==NULL)
+				LogError(ONE_POS,"Failed to find sufficient number of angle values in file '%s'",fname);
 			if (strstr(buf,"\n")==NULL  && !feof(file))
 				LogError(ONE_POS,"Buffer overflow while scanning lines in file '%s' (line size > %d)",fname,buf_size-1);
 			if (sscanf(buf,"%lf\n",a->val+i)!=1)
@@ -461,7 +458,8 @@ void ReadScatGridParms(const char * restrict fname)
 
 		ReadLineStart(input,fname,buf,BUF_LINE,"pairs=");
 		for (i=0;i<angles.N;i++) {
-			fgets(buf,BUF_LINE,input);
+			if (fgets(buf,BUF_LINE,input)==NULL)
+				LogError(ONE_POS,"Failed to find sufficient number of angle pairs in file '%s'",fname);
 			if (strstr(buf,"\n")==NULL && !feof(input))
 				LogError(ONE_POS,"Buffer overflow while scanning lines in file '%s' (line size > %d)",fname,BUF_LINE-1);
 			if (sscanf(buf,"%lf %lf\n",angles.theta.val+i,angles.phi.val+i)!=2)
@@ -503,8 +501,8 @@ void ReadScatGridParms(const char * restrict fname)
 //======================================================================================================================
 static inline double eta2(const double n[static restrict 3])
 /* calculates IGT_SO correction for scattering at direction n. Exact formula is based on integration of exp(ikn.r) over
- * the dipole volume, resulting in Product(sinc(kd[mu]*n[mu]/2),mu). But here we use a second-order approximation.
- * Does not depend on n for cubical dipoles.
+ * the voxel volume, resulting in Product(sinc(kd[mu]*n[mu]/2),mu). But here we use a second-order approximation.
+ * Does not depend on n for cubical voxels.
  */
 {
 	return 1-(kdX*kdX*n[0]*n[0]+kdY*kdY*n[1]*n[1]+kdZ*kdZ*n[2]*n[2])/24;
@@ -512,7 +510,7 @@ static inline double eta2(const double n[static restrict 3])
 
 //======================================================================================================================
 static inline doublecomplex eta2cmplx(const doublecomplex n[static restrict 3])
-// same as eta2, but for complex input vector. Does not depend on n (and is real) for cubical dipoles if n.n=1
+// same as eta2, but for complex input vector. Does not depend on n (and is real) for cubical voxels if n.n=1
 {
 	return 1-(kdX*kdX*n[0]*n[0]+kdY*kdY*n[1]*n[1]+kdZ*kdZ*n[2]*n[2])/24;
 }
@@ -533,12 +531,10 @@ static void CalcFieldFree(doublecomplex ebuff[static restrict 3], // where to wr
 	int i;
 	unsigned short ix,iy1,iy2,iz1,iz2;
 	size_t j,jjj;
-	double temp, na;
-	doublecomplex mult_mat[MAX_NMAT];
-	const bool scat_avg=true; // temporary fixed option for SO formulation
 #ifdef SPARSE
 	doublecomplex expX, expY, expZ;
 #endif
+
 	cvInit(sum);
 #ifndef SPARSE
 	// prepare values of exponents, along each of the coordinates
@@ -546,16 +542,16 @@ static void CalcFieldFree(doublecomplex ebuff[static restrict 3], // where to wr
 	imExp_arr(-kdY*n[1],boxY,expsY);
 	imExp_arr(-kdZ*n[2],local_Nz_unif,expsZ);
 #endif // !SPARSE
-	/* this piece of code tries to use that usually only x position changes from dipole to dipole, saving a complex
+	/* this piece of code tries to use that usually only x position changes from voxel to voxel, saving a complex
 	 * multiplication seems to be beneficial, even considering bookkeeping overhead; it may not be as good for very
 	 * porous particles though, but for them this part of code is anyway fast relative to the FFT on a large grid;
 	 * Further optimization is possible using some kind of plans, i.e. by preliminary analyzing the position of the
-	 * real dipoles on the grid.
+	 * real voxels on the grid.
 	 */
 	iy1=iz1=UNDEF;
 	for (j=0;j<local_nvoid_Ndip;++j) {
 		jjj=3*j;
-		// a=exp(-ikr.n), but r is taken relative to the first dipole of the local box
+		// a=exp(-ikr.n), but r is taken relative to the first voxel of the local box
 		ix=position[jjj];
 		iy2=position[jjj+1];
 		iz2=position[jjj+2];
@@ -575,12 +571,6 @@ static void CalcFieldFree(doublecomplex ebuff[static restrict 3], // where to wr
 		expX=imExp(-kdX*n[0]*ix);
 		a=tmp*expX;
 #endif // SPARSE
-		/* the following line may incur certain overhead (from 0% to 5% depending on tests).
-		 * It is possible to remove this overhead by separating the complete loop for SQ_SO in a separate case (and it
-		 * was like that at r1209). However, the code was much harder to read and maintain. Since there are several
-		 * ideas that may speed up this calculation by a factor of a few times, we should not worry about 5%.
-		 */
-		//if (ScatRelation==SQ_SO) a*=mult_mat[material[j]];
 		// sum(P*exp(-ik*r.n))
 		for(i=0;i<3;i++) sum[i]+=pvec[jjj+i]*a;
 	} /* end for j */
@@ -605,7 +595,7 @@ static void CalcFieldSurf(doublecomplex ebuff[static restrict 3], // where to wr
                           const double nF[static restrict 3])     // scattering direction (at infinity)
 /* Same as CalcFieldFree but for particle near surface.
  * For scattering into the substrate we employ the reciprocity principle. The scattered field is obtained from field of
- * the plane wave incoming from the scattered direction at the dipole position. In particular,
+ * the plane wave incoming from the scattered direction at the voxel center. In particular,
  * E_sca(s,p) = eF(s,p)*(k_0^2/r)*exp(ikr)*t'(s,p) * Sum[P_j.eN_(s,P)*exp(-i*k_0*nN.r_j)],
  * where eF,eN are unit [e.e=1] vectors at far and near-field, nN is the normalized transmitted k-vector (also nN.nN=1).
  * t' is transmittance coefficient from substrate into the vacuum, k is wavevector in the substrate.
@@ -636,8 +626,6 @@ static void CalcFieldSurf(doublecomplex ebuff[static restrict 3], // where to wr
 #endif
 
 	const bool above=(nF[2]>-ROUND_ERR); // we assume above-the-surface scattering for all boundary cases (like 90 deg)
-	// Using SQ_SO for particles near surface seems even beyond "under development"
-	if (ScatRelation==SQ_SO) LogError(ONE_POS,"Incompatibility error in CalcFieldSurf");
 	cvInit(sumN);
 	if (above) cvInit(sumF); //additional storage for directly propagated scattering
 
@@ -702,16 +690,16 @@ static void CalcFieldSurf(doublecomplex ebuff[static restrict 3], // where to wr
 	imExp_arr(-kdY*nN[1],boxY,expsY);
 	imExp_arr(-kdZ*nN[2],local_Nz_unif,expsZ);
 #endif // !SPARSE
-	/* this piece of code tries to use that usually only x position changes from dipole to dipole, saving a complex
+	/* this piece of code tries to use that usually only x position changes from voxel to voxel, saving a complex
 	 * multiplication seems to be beneficial, even considering bookkeeping overhead; it may not be as good for very
 	 * porous particles though, but for them this part of code is anyway fast relative to the FFT on a large grid;
 	 * Further optimization is possible using some kind of plans, i.e. by preliminary analyzing the position of the
-	 * real dipoles on the grid.
+	 * real voxels on the grid.
 	 */
 	iy1=iz1=UNDEF;
 	if (above) for (j=0;j<local_nvoid_Ndip;++j) { // two sums need to be calculated
 		jjj=3*j;
-		// a=exp(-ikr.n), but r is taken relative to the first dipole of the local box
+		// a=exp(-ikr.n), but r is taken relative to the first voxel of the local box
 		ix=position[jjj];
 		iy2=position[jjj+1];
 		iz2=position[jjj+2];
@@ -743,7 +731,7 @@ static void CalcFieldSurf(doublecomplex ebuff[static restrict 3], // where to wr
 	} /* end for j above surface */
 	else for (j=0;j<local_nvoid_Ndip;++j) { // below surface, single sum - similar to free-space scattering
 		jjj=3*j;
-		// a=exp(-ikr.n), but r is taken relative to the first dipole of the local box
+		// a=exp(-ikr.n), but r is taken relative to the first voxel of the local box
 		ix=position[jjj];
 		iy2=position[jjj+1];
 		iz2=position[jjj+2];
@@ -820,27 +808,27 @@ double ExtCross(const double * restrict incPol)
 	double sum;
 	size_t i;
 
-	if (beamtype==B_PLANE && !surface) {
+	// this can be considered a legacy case, which works only for the simplest plane way centered at the particle 
+	if (beamtype==B_PLANE && !surface && !beam_asym) {
 		CalcField (ebuff,prop);
 		sum=crDotProd_Re(ebuff,incPol); // incPol is real, so no conjugate is needed
 		MyInnerProduct(&sum,double_type,1,&Timing_ScatQuanComm);
 		sum*=FOUR_PI/(WaveNum*WaveNum);
 	}
 	/* more general formula; normalization is done assuming the unity amplitude of the electric field in the focal point
-	 * of the beam; It does not comply with ScatRelation SO. So SO is, effectively, replaced by DRAINE when calculating
-	 * Cext for non-plane beams.
+	 * of the beam
 	 */
 	else {
 		sum=0;
 		for (i=0;i<local_nvoid_Ndip;++i) sum+=cDotProd_Im(pvec+3*i,Einc+3*i); // sum{Im(P.E_inc*)}
 		MyInnerProduct(&sum,double_type,1,&Timing_ScatQuanComm);
 		sum*=FOUR_PI*WaveNum;
-		/* For cubical dipoles the following satisfies IGT_SO, because this factor is applied in CalcField() and is
-		 * independent of propagation or scattering direction. For rectangular dipoles, it is only approximate but
-		 * expected to be accurate for not very elongated dipoles and/or not very spread out incident field.
+		/* For cubical voxels the following satisfies IGT_SO, because this factor is applied in CalcField() and is
+		 * independent of propagation or scattering direction. For rectangular voxels, it is only approximate but
+		 * expected to be accurate for not very elongated voxels and/or not very spread out incident field.
 		 *
-		 * In principle, the situation is similar for SO of full IGT, but there the correction factor depends on the
-		 * propagation direction.even for cubical dipoles
+		 * In principle, the situation is similar for full IGT, but there the correction factor depends on the
+		 * propagation direction even for cubical voxels
 		 */
 		if (ScatRelation==SQ_IGT_SO) sum*=eta2(prop);
 	}
@@ -857,7 +845,7 @@ double ExtCross(const double * restrict incPol)
 double AbsCross(void)
 // Calculate the Absorption cross-section for process 0
 {
-	size_t dip;
+	size_t dip,index;
 	int i,j,nmat;
 	unsigned char mat;
 	double sum;
@@ -865,6 +853,7 @@ double AbsCross(void)
 	doublecomplex m,m2m1;
 	doublecomplex pol;
 	double mult[MAX_NMAT][3]; // multiplier (possibly anisotropic)
+	doublecomplex chi[3][3];
 	doublecomplex alpha[3][3], alphaT[3][3]; //Polarizability tensor α and its transpose
 	doublecomplex P[3]; //Polarization P of the voxel
 	doublecomplex beta[3][3], betaT[3][3]; //Square root of polarizability tensor and its transpose
@@ -881,42 +870,26 @@ double AbsCross(void)
 			/* based on Eq.(35) from Yurkin and Hoekstra, "The discrete dipole approximation: an overview and recent
 			 * developments," JQSRT 106:558-589 (2007).
 			 * summand: Cabs=-4πk∑{Im[P*.(P\α)]+(2/3)k^3*|P|^2}*/
-			double ImRR = 2*WaveNum*WaveNum*WaveNum/3;
-			if(use_wd){
-				FILE* draine = fopen("draine.txt","wt");
-				if(print_wd){
-					fprintf(draine,"Absorption cross-section Cabs is computed for each voxel :\n");
-					fprintf(draine,"Boundary voxels (f<1) : Cabs=Im{P.[(1/α)P]*}-(2/3)k^3|P|^2\n");
-					fprintf(draine,"Core voxels (f=1) : Cabs=[Im(1/α)-(2/3)k^3]|P|^2\n\n");
-				}
+			double temp1 = 2*WaveNum*WaveNum*WaveNum/3;
+			if(use_wd || use_ema){
 				for (dip=0,sum=0;dip<local_nvoid_Ndip;++dip){
 					//Computes Im[P*.(P\α)]=Im{P*.[P\(β'β)]}
 					for(i=0;i<3;i++) P[i]=pvec[3*dip+i];
 					MatrSet(beta,0);
 					if(volfrac[dip]<1.0) for (int i=0;i<3;i++) for (int j=0;j<3;j++) beta[i][j]=sqrtCC[9*dip+i+3*j];
-					else{
-						if(anisotropy) for (int j=0;j<3;j++) beta[j][j]=sqrtCC[9*dip+3*j+j];
-						else for (int j=0;j<3;j++) beta[j][j]=sqrtCC[9*dip];
-					}
+					else for (int j=0;j<3;j++) beta[j][j]=sqrtCC[9*dip];
 					MatrTrans(betaT,beta);//β'=(β)'
 					MatrProd(3,betaT,beta,alpha); //α=β'.β
 					MatrInv(alpha,tmp); //α->1/α
 					MatrVecMul(3,tmp,P,temp); //1/α->(1/α)P
-					sum+=cimag(cDotProd(P,temp))-ImRR*cvNorm2(P); //Im{P.[(1/α)P]*}-(2/3)k^3|P|^2
-					if(print_wd){
-						fprintf(draine,"Voxel %d : Cabs=%.6e\n",dip,cimag(cDotProd(P,temp))-ImRR*cvNorm2(P));
-						fprintf(draine,"Polarization P=(%.6e+%.6ei, %.6e+%.6ei, %.6e+%.6ei)\n",creal(P[0]),cimag(P[0]),
-						creal(P[1]),cimag(P[1]),creal(P[2]),cimag(P[2]));
-						fprintf(draine,"Polarizability α=\n");
-						DebugMatr(3,draine,alpha);
-					}
+					sum+=cimag(cDotProd(P,temp))-temp1*cvNorm2(P); //Im{P.[(1/α)P]*}-(2/3)k^3|P|^2
 				}
-				fclose(draine);
 			}else{
-				for (i=0;i<Nmat;i++) for (j=0;j<3;j++) mult[i][j]=-cimag(1/cc[i][j])-ImRR;
-				for (dip=0,sum=0;dip<local_nvoid_Ndip;++dip){
+				for (i=0;i<Nmat;i++) for (j=0;j<3;j++) mult[i][j]=-cimag(1/cc[i][j])-temp1;
+				for (dip=0,sum=0;dip<local_nvoid_Ndip;++dip) {
 					mat=material[dip];
-					for(i=0;i<3;i++) sum+=mult[mat][i]*cAbs2(pvec[3*dip+i]);
+					index=3*dip;
+					for(i=0;i<3;i++) sum+=mult[mat][i]*cAbs2(pvec[index+i]);
 				}
 			}
 			break;
@@ -924,17 +897,25 @@ double AbsCross(void)
 			/* based on Eq.(31) or equivalently Eq.(58) from the same paper (ref. above)
 			 * summand: Im(P.E(*))=-|P|^2*Im(1/chi)*1/V
 			 */
-			if(use_wd){
-				PrintError("FINDIP formulation is not yet ready for WD ! Use DRAINE instead");
+			if(use_wd || use_ema){
+				for (dip=0,sum=0;dip<local_nvoid_Ndip;++dip){
+					for(i=0;i<3;i++) P[i]=pvec[3*dip+i];
+					MatrSet(tmp,0);
+					for (i=0;i<3;i++) for (j=0;j<3;j++) tmp[i][j]=invchi[9*dip+i+3*j];
+					MatrVecMul(3,tmp,P,temp);
+					sum+=cimag(cDotProd(P,temp));
+					MatrMul(temp,dipvol);
+					MatrInv(temp,chi);
+				}
 			}else{
 				for (i=0;i<Nmat;i++) for (j=0;j<3;j++) mult[i][j]=-cimag(chi_inv[i][j]);
-				for (dip=0,sum=0;dip<local_nvoid_Ndip;++dip){
+				for (dip=0,sum=0;dip<local_nvoid_Ndip;++dip) {
 					mat=material[dip];
-					for(i=0;i<3;i++) sum+=mult[mat][i]*cAbs2(pvec[3*dip+i]);
+					index=3*dip;
+					for(i=0;i<3;i++) sum+=mult[mat][i]*cAbs2(pvec[index+i]);
 				}
 			}
 			break;
-
 	}
 	MyInnerProduct(&sum,double_type,1,&Timing_ScatQuanComm);
 	if (surface) sum*=inc_scale;
@@ -1290,7 +1271,7 @@ void AsymParm_z(double *vec,const char *f_suf)
 void Frp_mat(double Finc_tot[static restrict 3],double Fsca_tot[static restrict 3],
 	double * restrict Frp)
 /* Calculate the Radiation Pressure (separately incident and scattering part by direct calculation of the scattering
- * force. The total force per dipole is calculated as intermediate results. It is saved to Frp, if the latter is not
+ * force. The total force per voxel is calculated as intermediate results. It is saved to Frp, if the latter is not
  * NULL. mem denotes the specific memory allocated before function call
  *
  * This should be completely rewritten to work through FFT. Moreover, it should comply with '-scat ...' command line
@@ -1316,7 +1297,7 @@ void Frp_mat(double Finc_tot[static restrict 3],double Fsca_tot[static restrict 
 	// initialize
 	vInit(Fsca_tot);
 	vInit(Finc_tot);
-	// Calculate incoming force per dipole
+	// Calculate incoming force per voxel
 	if (Frp==NULL) vec=Finc;
 	else mem+=sizeof(double)*local_nRows; // memory allocated before for Frp
 	/* The following expression F_inc=k(v)*0.5*Sum(P.Einc(*)) is valid only for the plane wave
@@ -1335,7 +1316,7 @@ void Frp_mat(double Finc_tot[static restrict 3],double Fsca_tot[static restrict 
 	 * and rdipT does not change between the calls. So one AllGather of rdipT can be removed. Number of memory
 	 * allocations can also be reduced. But this should be replaced by Fourier anyway.
 	 */
-	/* The following is somewhat redundant in sparse mode, since "full" (containing information about all dipoles)
+	/* The following is somewhat redundant in sparse mode, since "full" (containing information about all voxels)
 	 * vectors are already present in that mode. However, we do not optimize it now, since in standard mode radiation
 	 * forces should be computed by FFT anyway. Moreover, there are certain ideas to optimize sparse mode, so it will
 	 * not use full vectors - if done, this improvement can be also adjusted to the code below.
@@ -1355,7 +1336,7 @@ void Frp_mat(double Finc_tot[static restrict 3],double Fsca_tot[static restrict 
 	rdipT=DipoleCoord;
 	if (mem!=0) PrintBoth(logfile,"Additional memory usage for radiation forces: "FFORMM" MB\n",mem/MBYTE);
 #endif
-	// Calculate scattering force per dipole
+	// Calculate scattering force per voxel
 	/* Currently, testing the correctness of the following is very hard because the original code lacks comments. So the
 	 * best we can do before rewriting it completely is to test that it produces reasonable results for a number of test
 	 * cases.

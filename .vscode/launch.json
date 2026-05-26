@@ -1,0 +1,99 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug ADDA seq",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/seq/adda",
+            "args": ["-shape","box","-m","2.0","1.0","-size","1.0","-grid","8","-pol","cm","-int","poi","-scat","dr","-iter","qmr","-eps","5","-Csca","-no_vol_cor","-weighted_discr","-curv_cor"],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/src/seq",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ],
+            "preLaunchTask": "Build ADDA Debug",
+            "miDebuggerPath": "/usr/bin/gdb",
+            "logging": {
+                "engineLogging": true
+            }
+        },
+        {
+            "name": "Debug ADDA mpi",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "/usr/bin/mpirun",
+            "args": [
+                "-np",
+                "4",
+                "${workspaceFolder}/src/mpi/adda_mpi",
+                "-shape","sphere","-m","2.0","1.0","-size","1.0","-grid","8","-pol","cm","-int","poi","-scat","dr","-iter","qmr","-eps","5","-Csca","-no_vol_cor","-weighted_discr"
+            ],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/src/mpi",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ],
+            "preLaunchTask": "Build ADDA_mpi Debug",
+            "miDebuggerPath": "/usr/bin/gdb",
+            "logging": {
+                "engineLogging": true
+            }
+        },
+        {
+            "name": "Debug ADDA ocl",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/ocl/adda_ocl",
+            "args": [
+                "-gpu",
+                "0",
+                "-shape","sphere","-m","2.0","1.0","-size","1.0","-grid","8","-pol","cm","-int","poi","-scat","dr","-iter","qmr","-eps","5","-Csca","-no_vol_cor","-weighted_discr"
+            ],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/src/ocl",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ],
+            "preLaunchTask": "Build ADDA_ocl Debug",
+            "miDebuggerPath": "/usr/bin/gdb",
+            "logging": {
+                "engineLogging": true
+            }
+        }
+    ],
+    "compounds": [
+        {
+            "name": "Debug All ADDA Configurations",
+            "configurations": [
+                "Debug ADDA seq",
+                "Debug ADDA mpi",
+                "Debug ADDA ocl"
+            ]
+        }
+    ]
+}

@@ -12,13 +12,13 @@
  * You should have received a copy of the GNU General Public License along with ADDA. If not, see
  * <http://www.gnu.org/licenses/>.
  */
-//hello world this is new WD! God help us
+// This is where the fun begins !
 // project headers
 #include "comm.h"
 #include "debug.h"
 #include "io.h"
 #include "vars.h"
-#include "volfrac.h"
+#include "WD.h"
 // system headers
 #include <stdio.h>
 #include <stdlib.h>
@@ -59,7 +59,6 @@ void PrintInfo(void);
 
 int main(int argc,char **argv)
 {
-	printf("ADDA v1.0");
 	/* Pointer argv can be declared restrict here and in all calling functions. However, that would be hard to verify,
 	 * especially in newly-added functions for parsing command line option. Since the optimization gain is expected to
 	 * be minor, if any, we stay conservative on this issue.
@@ -81,7 +80,7 @@ int main(int argc,char **argv)
 	ParseParameters(argc,argv);
 	D("Reading command line finished");
 	VariablesInterconnect(); // also initializes beam
-	// Initialize box's; get number of dipoles; set some variables
+	// Initialize box's; get number of voxels; set some variables
 	InitShape();
 	D("Initialization of shape finished");
 	FinalizeSymmetry(); // finalize symmetries and check for possible conflicts of symmetries with other options
@@ -91,19 +90,7 @@ int main(int argc,char **argv)
 	// Initialize FFT grid and its subdivision over processors
 	ParSetup();
 	// MakeParticle; initialize dpl and local_nRows
-
-	//TestVolFrac();
-	//TestMatrixoops();
-	//TestSchur();
-	//TestTagaki();
-	//TestPolCalc();
-	//Testmatrinv();
-//return 0; // for test purposes
-
 	MakeParticle();
-
-	//TestMatrixoops();
-
 	D("Make particle finished");
 	// Print info to stdout and logfile
 	PrintInfo();

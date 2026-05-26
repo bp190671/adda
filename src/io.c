@@ -149,7 +149,7 @@ void WrapLines(char *restrict str)
 			mid=left+term_width;
 			// search backward for space
 			while (mid>=left) {
-				if(mid[0]==' ') {
+				if (mid[0]==' ') {
 					mid[0]='\n';
 					left=mid+1;
 					divided=true;
@@ -161,7 +161,7 @@ void WrapLines(char *restrict str)
 			if (!divided) {
 				mid=left+term_width+1;
 				while (mid<right) {
-					if(mid[0]==' ') {
+					if (mid[0]==' ') {
 						mid[0]='\n';
 						left=mid+1;
 						divided=true;
@@ -461,7 +461,7 @@ void FCloseErr(FILE * restrict file,const char * restrict fname,ERR_LOC_DECL)
 void RemoveErr(const char * restrict fname,ERR_LOC_DECL)
 // remove file and check the result
 {
-	if(remove(fname) && errno!=ENOENT) LogWarning(EC_WARN,ERR_LOC_CALL,
+	if (remove(fname) && errno!=ENOENT) LogWarning(EC_WARN,ERR_LOC_CALL,
 		"Failed to remove temporary file '%s' (%s). Remove it manually, if needed",fname,strerror(errno));
 }
 
@@ -494,9 +494,9 @@ void MkDirErr(const char * restrict dir,ERR_LOC_DECL)
 //======================================================================================================================
 
 static inline void SkipFullLine(FILE * restrict file,char * restrict buf,const int buf_size)
-// skips full line in the file, starting from current position; uses buffer 'buf' with size 'buf_size'
+// skips full line in the file (or till error, including EOF); uses buffer 'buf' with size 'buf_size'
 {
-	do fgets(buf,buf_size,file); while (strchr(buf,'\n')==NULL && !feof(file));
+	while (fgets(buf,buf_size,file)!=NULL && strchr(buf,'\n')==NULL) continue;
 }
 
 //======================================================================================================================

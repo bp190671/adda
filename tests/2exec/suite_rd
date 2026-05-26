@@ -12,6 +12,8 @@
 ;mgn; ;m; ;g; ;n;
 # default for two-domain particles
 ;2mgn; ;2m; ;g; ;n;
+# default for three-domain particles
+;3mgn; ;3m; ;g; ;n;
 # for large computations (e.g. orientation averaging)
 ;mg4n; ;m; -grid 4 ;n;
 # for testing odd grids
@@ -28,7 +30,9 @@
 ;g; -grid 8
 ;n; -ntheta 5
 ;p; -prop 1 2 3
+;pd; -prop 0 0 -1
 ;se; -shape ellipsoid 0.5 1.5
+;sob; -shape box 1 0.125
 
 #----------------------------- List of tests ---------------------------------------------------------------------------
 # The format is the following: '<list,of,files,to,compare> <cmdline>' the first one is coma-separated list of files to
@@ -76,15 +80,15 @@ all -h beam
 all -h beam plane
 all -beam plane ;mgn;
 all -h beam lminus
-all -beam lminus 2 1 2 3 ;mgn;
+all -beam lminus 2 -beam_center 1 2 3 ;mgn;
 all -h beam davis3
-all -beam davis3 2 1 2 3 ;mgn;
+all -beam davis3 2 -beam_center 1 2 3 ;mgn;
 all -beam davis3 2 ;mg9n;
 all -h beam barton5
-all -beam barton5 2 1 2 3 ;mgn;
+all -beam barton5 2 -beam_center 1 2 3 ;mgn;
 all -beam barton5 2 ;mg9n;
-!RD_TRICKY -beam dipole 3 2 1 ;p; ;mgn;
-&RD_TRICKY -beam dipole 3 2 1 ;smg12n;
+!RD_TRICKY -beam dipole -beam_center 3 2 1 ;p; ;mgn;
+&RD_TRICKY -beam dipole -beam_center 3 2 1 ;smg12n;
 all -h beam read
 #all -beam read IncBeam-Y IncBeam-X ;se; ;mgn;
 
@@ -150,7 +154,6 @@ all -h int
 #all -int nloc_av 0.1 ;mgn;
 #all -int nloc_av 1 ;mgn;
 !RD_TRICKY -int poi ;mgn;
-#all -int so ;mgn;
 
 all -h int_surf
 all -int_surf img -surf 4 2 0 ;mgn;
@@ -216,7 +219,6 @@ all -h pol
 #all -pol nloc_av 0.1 ;mgn;
 #all -pol nloc_av 1 ;mgn;
 #all -pol rrc ;mgn;
-#all -pol so ;p; ;mgn;
 
 all -h prognosis
 all -prognosis
@@ -244,7 +246,6 @@ all -h scat
 all -scat dr ;mgn;
 all -scat fin ;mgn;
 all -scat igt_so ;mgn;
-#all -scat so ;mgn;
 
 all -h scat_grid_inp
 all -scat_grid_inp sp.dat ;mgn;
@@ -279,6 +280,8 @@ all -shape chebyshev 0.3 5 ;mgn;
 all -h shape coated
 !RD_TRICKY -shape coated 0.5 ;2mgn;
 !RD_TRICKY -shape coated 0.4 0.1 0.15 0.2 ;2mgn;
+all -h shape coated2
+!RD_TRICKY -shape coated2 0.7 0.4 ;3mgn;
 all -h shape cylinder
 all -shape cylinder 1 ;mgn;
 all -h shape egg
@@ -288,6 +291,10 @@ all -shape ellipsoid 0.25 2 ;mgn;
 all -h shape line
 !RD_TRICKY -shape line -grid 16 ;m; ;n;
 !RD_TRICKY -shape line -grid 8 2 3 ;m; ;n;
+all -h shape onion
+!RD_TRICKY all -shape onion 0.7 0.4 ;3mgn;
+all -h shape onion_ell
+!RD_TRICKY all -shape onion_ell 0.25 2 0.7 0.4 ;3mgn;
 all -h shape plate
 all -shape plate 0.5 ;mgn;
 all -h shape prism
@@ -304,6 +311,8 @@ all -h shape sphere
 all -shape sphere ;mgn;
 all -h shape spherebox
 !RD_TRICKY -shape spherebox 0.5 ;2mgn;
+all -h shape superellipsoid
+!RD_TRICKY -shape superellipsoid 0.5 0.75 0.5 1.5 ;mgn;
 
 all -h size
 all -size 8 ;mgn;
@@ -337,12 +346,17 @@ all -surf 4 2 0 ;mgn;
 !RD_TRICKY -surf 4 3 4 -prop 1 2 -3 ;se; ;mgn;
 !RD_TRICKY -surf 4 inf -prop 1 2 -3 ;se; ;mgn;
 &RD_TRICKY -surf 4 inf -prop 1 2 -3 ;se; ;m; ;n; -size 5 -grid 12
-!RD_TRICKY -surf 4 2 1 -beam dipole 3 2 1 ;p; ;mgn;
-&RD_TRICKY -surf 4 2 1 -beam dipole 3 2 1 ;p; ;smg12n;
-!RD_TRICKY -surf 4 inf -beam dipole 3 2 1 ;p; ;mgn;
-&RD_TRICKY -surf 4 2 1 -beam dipole 3 2 1 ;p; ;smg12n;
+!RD_TRICKY -surf 4 2 1 -beam dipole -beam_center 3 2 1 ;p; ;mgn;
+&RD_TRICKY -surf 4 2 1 -beam dipole -beam_center 3 2 1 ;p; ;smg12n;
+!RD_TRICKY -surf 4 inf -beam dipole -beam_center 3 2 1 ;p; ;mgn;
+&RD_TRICKY -surf 4 2 1 -beam dipole -beam_center 3 2 1 ;p; ;smg12n;
 all -surf 4 2 0 -no_reduced_fft ;mgn;
-!mpi,!mpi_seq -surf 4 2 0 -iter cgnr -no_reduced_fft ;mgn; 
+!mpi,!mpi_seq -surf 4 2 0 -iter cgnr -no_reduced_fft ;mgn;
+CrossSec-Y,log,stdout -surf 4 5 2 ;pd; ;mgn;
+!RD_TRICKY -surf 0.5 0.9 4 ;sob; ;pd; ;mgn;
+!RD_TRICKY -surf 0.5 0.1 1.1 ;sob; ;pd; ;mgn;
+!RD_TRICKY -surf 0.5 0.1 0 ;sob; ;pd; ;mgn;
+all -surf 4 2 1 -shape box 1 20 -size 0.04 -grid 1 ;pd; ;m; ;n; 
 
 all -h sym
 all -sym auto ;mgn;

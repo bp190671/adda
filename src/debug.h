@@ -24,7 +24,7 @@
 #define PRINT_COMPLEX(x) printf(#x"=%g%+gi\n",REIM(x))
 
 #ifdef DEBUGFULL
-
+# include "comm.h"
 #	include "const.h"    // for POS
 #	include "function.h" // for function attributes
 #	include "io.h"       // for ERR_LOC_DECL
@@ -33,6 +33,15 @@
 #	define Dz(...) DebugPrintf(ONE_POS,__VA_ARGS__)
 void DebugPrintf(ERR_LOC_DECL,const char * restrict fmt,...) ATT_PRINTF(4,5);
 void FieldPrint(doublecomplex * restrict x) ATT_UNUSED;
+void PrintScalar(const enum incpol which,doublecomplex * restrict cmplxF,
+	double * restrict realF,const char * restrict fname_preffix,const char * restrict tmpl UOIP,
+	const char * restrict field_name,const char * restrict fullname);
+void PrintVector(const enum incpol which,doublecomplex * restrict cmplxF,
+	double * restrict realF,const char * restrict fname_preffix,const char * restrict tmpl UOIP,
+	const char * restrict field_name,const char * restrict fullname);
+void PrintTensor(const enum incpol which,doublecomplex * restrict cmplxF,
+	double * restrict realF,const char * restrict fname_preffix,const char * restrict tmpl UOIP,
+	const char * restrict field_name,const char * restrict fullname);
 #else
 #	define D(...)
 #	define Dz(...)

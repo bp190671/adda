@@ -35,6 +35,7 @@ extern double * restrict DipoleCoord;
 extern double * restrict plSec;
 extern doublecomplex * restrict refind;
 extern doublecomplex * restrict sqrtCC;
+extern doublecomplex * restrict invchi;
 extern double memory,memPeak;
 extern enum inter IntRelation;
 extern enum pol PolRelation;
@@ -45,15 +46,14 @@ extern bool symX,symY,symZ,symR;
 
 // flags
 extern bool prognosis,yzplane,scat_plane,store_mueller,all_dir,scat_grid,phi_integr,sh_granul,reduced_FFT,orient_avg,
-	load_chpoint,beam_asym,anisotropy,save_memory,ipr_required,rectDip,use_wd,print_wd;
+	load_chpoint,beam_asym,anisotropy,save_memory,ipr_required,rectDip,use_wd,use_ema;
 extern double propAlongZ;
 
 // 3D vectors
-extern double prop_0[3],prop[3],incPolX[3],incPolY[3],beam_center[3],box_origin_unif[3];
+extern double prop_0[3],prop[3],incPolX[3],incPolY[3],beam_center_0[3],beam_center[3],box_origin_unif[3];
 
 // file info
 extern const char * restrict directory;
-extern FILE * restrict voxel_wd;
 extern FILE * restrict logfile;
 extern int term_width;
 
@@ -87,12 +87,13 @@ extern TIME_TYPE Timing_EField,Timing_FileIO,Timing_Integration,tstart_main;
 extern bool surface,msubInf;
 extern enum refl ReflRelation;
 extern doublecomplex msub;
-extern double inc_scale,hsub,prIncRefl[3],prIncTran[3];
+extern double inc_scale,hsub;
+
+extern double * restrict volfrac;
 
 #ifndef SPARSE // These variables are exclusive to the FFT mode
 
 extern unsigned short * restrict position;
-extern double * restrict volfrac;
 // auxiliary grids and their partition over processors
 extern size_t gridX,gridY,gridZ;
 extern size_t gridYZ;

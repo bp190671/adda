@@ -544,9 +544,9 @@ void nMultSelf_cmplx(doublecomplex * restrict a,const doublecomplex c)
 
 //======================================================================================================================
 
-void nMult_dip(doublecomplex * restrict a,const doublecomplex * restrict b, doublecomplex * restrict c)
-/* multiply by a function of material of dipole number; a[3*i+j]=c[i]*b[3*i+j]
- * !!! a,b,c must not alias !!!
+void MatrMultSelf_dip(doublecomplex * restrict a, doublecomplex * restrict c,bool trans)
+/* multiply by a function of voxel material and component; a[3*i+j]*=c+9i
+ * !!! a and c must not alias !!!
  * It seems impossible to declare c as constant (due to two pointers)
  */
 {
@@ -556,15 +556,21 @@ void nMult_dip(doublecomplex * restrict a,const doublecomplex * restrict b, doub
 	/* Hopefully, the following declaration is enough to allow efficient loop unrolling. So the compiler should
 	 * understand that none of the used vectors alias. Otherwise, deeper optimization should be used.
 	 */
-	doublecomplex val;
+	doublecomplex matrix[3][3],matrixT[3][3],b[3];
 
 	LARGE_LOOP;
-	for (i=0,k=0;i<nd;i++,k+=3) {
-		val=c[i]; //Single value per voxel (e.g., scalar polarizability)
-		/*Scalar-vector product is treated below*/
-		a[k] = val*b[k];
-		a[k+1] = val*b[k+1];
-		a[k+2] = val*b[k+2];
+	for (i=0, k=0; i < nd; i++, k+=3) {
+		/*Matrix vector product are treated below*/
+		if (volfrac[i]<1.0){ // Full tensor per voxel (e.g., polarizability tensor)
+			ArrayToMatr(c+9*i,matrix);
+			if (trans) MatrTrans(matrixT, matrix); //Transpose the matrix
+			else MatrCopy(3,matrixT, matrix); //Otherwise, just copy the matrix
+			for (j=0;j<3;j++) b[j]=a[k+j];
+			MatrVecMul(3,matrixT,b,a+k); //Computes the matrix-vector product
+		}else{
+			/*Scalar-vector product is treated below*/
+			for (j=0;j<3;j++) a[k+j]*=c[9*i];
+		}
 	}
 }
 
@@ -582,7 +588,7 @@ void MatrMult_dip(doublecomplex * restrict a,const doublecomplex * restrict b, d
 	/* Hopefully, the following declaration is enough to allow efficient loop unrolling. So the compiler should
 	 * understand that none of the used vectors alias. Otherwise, deeper optimization should be used.
 	 */
-	doublecomplex val, diag, matrix[3][3], matrixT[3][3];
+	doublecomplex matrix[3][3], matrixT[3][3];
 
 	LARGE_LOOP;
 	for (i=0, k=0; i < nd; i++, k+=3) {
@@ -592,18 +598,9 @@ void MatrMult_dip(doublecomplex * restrict a,const doublecomplex * restrict b, d
 			if (trans) MatrTrans(matrixT, matrix); //Transpose the matrix
 			else MatrCopy(3,matrixT, matrix); //Otherwise, just copy the matrix
 			MatrVecMul(3, matrixT, b+k, a+k); //Computes the matrix-vector product
-		}else if(anisotropy){ // Diagonal tensor per voxel (e.g., diagonal polarizability)
-			/*Diagonal tensor-vector product is treated below*/
-			for (int j=0;j<3;j++) diag=c[9*i+4*j];
-			a[k]=diag*b[k];
-			a[k+1]=diag*b[k+1];
-			a[k+2]=diag*b[k+2];
 		}else{
-			val=c[9*i]; //Single value per voxel (e.g., scalar polarizability)
 			/*Scalar-vector product is treated below*/
-			a[k]=val*b[k];
-			a[k+1]=val*b[k+1];
-			a[k+2]=val*b[k+2];
+			for (j=0;j<3;j++) a[k+j]=c[9*i]*b[k+j];
 		}
 	}
 }
@@ -611,7 +608,7 @@ void MatrMult_dip(doublecomplex * restrict a,const doublecomplex * restrict b, d
 //======================================================================================================================
 
 void nMult_mat(doublecomplex * restrict a,const doublecomplex * restrict b,/*const*/ doublecomplex (* restrict c)[3])
-/* multiply by a function of material of a dipole and component; a[3*i+j]=c[mat[i]][j]*b[3*i+j]
+/* multiply by a function of voxel material and component; a[3*i+j]=c[mat[i]][j]*b[3*i+j]
  * !!! a,b,c must not alias !!!
  * It seems impossible to declare c as constant (due to two pointers)
  */
@@ -632,8 +629,10 @@ void nMult_mat(doublecomplex * restrict a,const doublecomplex * restrict b,/*con
 	}
 }
 
+//======================================================================================================================
+
 void nMultSelf_mat(doublecomplex * restrict a,/*const*/ doublecomplex (* restrict c)[3])
-/* multiply by a function of material of a dipole and component; a[3*i+j]*=c[mat[i]][j]
+/* multiply by a function of voxel material and component; a[3*i+j]*=c[mat[i]][j]
  * !!! a and c must not alias !!!
  * It seems impossible to declare c as constant (due to two pointers)
  */

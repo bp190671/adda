@@ -12,11 +12,11 @@
  * You should have received a copy of the GNU General Public License along with ADDA. If not, see
  * <http://www.gnu.org/licenses/>.
  */
-
-/* This file should be compiled only in OpenCL mode, hence the following declaration is redundant. However, it helps
- * proper syntax checking in IDE, such as Eclipse.
+/* The following tests for compilation inconsistencies, but also helps proper syntax checking in IDE, such as Eclipse.
+ * Otherwise, a lot of unresolved-symbol errors are produced, when another build configuration is selected.
  */
 #ifndef OPENCL
+#  error "This file requires OPENCL to be defined"
 #  define OPENCL
 #endif
 
@@ -28,6 +28,7 @@
 #include "memory.h"
 #include "vars.h"
 // system headers
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -40,7 +41,7 @@ cl_context context;
 cl_command_queue command_queue;
 cl_kernel clarith1,clarith2,clarith3,clarith3_surface,clarith4,clarith5,clzero,clinprod,clnConj,cltransposeof,
 	cltransposeob,cltransposeofR;
-cl_mem bufXmatrix,bufmaterial,bufposition,bufsqrtCC,bufargvec,bufresultvec,bufslices,bufslices_tr,bufDmatrix,
+cl_mem bufXmatrix,bufmaterial,bufposition,bufvolfrac,bufsqrtCC,bufcc_sqrt,bufargvec,bufresultvec,bufslices,bufslices_tr,bufDmatrix,
 	bufinproduct;
 
 /* defines if bufargvec and bufresultvec are to be uploaded in the beginning of MatVec
@@ -400,6 +401,7 @@ void oclinit(void)
 	fseek(file,0,SEEK_SET);
 	MALLOC_VECTOR(cSourceString,char,sourceStrSize+1,ALL);
 	fread(cSourceString,sourceStrSize,1,file);
+	cSourceString[sourceStrSize]='\0'; // ensure that the string is zero-terminated
 	fclose(file);
 	cssPtr[0]=(const char *)cSourceString;
 #else
@@ -438,7 +440,8 @@ void oclinit(void)
 	}
 	clzero=clCreateKernel(program,"clzero",&err);
 	CL_CH_ERR(err);
-	clarith1=clCreateKernel(program,"arith1",&err);
+	if(use_wd||use_ema) clarith1=clCreateKernel(program,"arith1_wd",&err);
+	else clarith1=clCreateKernel(program,"arith1",&err);
 	CL_CH_ERR(err);
 	clarith2=clCreateKernel(program,"arith2",&err);
 	CL_CH_ERR(err);
@@ -446,7 +449,8 @@ void oclinit(void)
 	CL_CH_ERR(err);
 	clarith4=clCreateKernel(program,"arith4",&err);
 	CL_CH_ERR(err);
-	clarith5=clCreateKernel(program,"arith5",&err);
+	if(use_wd||use_ema) clarith5=clCreateKernel(program,"arith5_wd",&err);
+	else clarith5=clCreateKernel(program,"arith5",&err);
 	CL_CH_ERR(err);
 	clnConj=clCreateKernel(program,"nConj",&err);
 	CL_CH_ERR(err);

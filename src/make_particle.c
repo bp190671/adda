@@ -24,7 +24,7 @@
 #include "timing.h"
 #include "types.h"
 #include "vars.h"
-#include "volfrac.h"
+#include "WD.h"
 // 3rd party headers
 #include "mt19937ar.h"
 // system headers
@@ -40,6 +40,7 @@
 // SEMI-GLOBAL VARIABLES
 
 // defined and initialized in param.c
+extern const enum emt EffMedium;
 extern const enum sh shape;
 extern const double lambda;
 extern double sizeX,dpl,a_eq;
@@ -65,40 +66,42 @@ extern TIME_TYPE Timing_Granul,Timing_GranulComm;
 #endif
 
 // used in interaction.c
-double ZsumShift; // real distance between the lowest (in Z) dipoles and its image
+double ZsumShift; // real distance between the lowest (in Z) voxel center and its image, must be positive
 // used in param.c
 bool volcor_used;                // volume correction was actually employed
 const char *sh_form_str1,*sh_form_str2; // strings for log file with shape parameters (first one should end with :)
 size_t gr_N;                     // number of granules
 double gr_vf_real;               // actual granules volume fraction
-size_t mat_count[MAX_NMAT+1];    // number of dipoles in each domain
+size_t mat_count[MAX_NMAT+1];    // number of voxels in each domain
 
 // LOCAL VARIABLES
-# define M_PI		3.14159265358979323846	/* pi */
-static const char geom_format[]="%d %d %d\n";              // format of the geom file
-static const char geom_format_ext[]="%d %d %d %d\n";       // extended format of the geom file
+
+#define GEOM_FORMAT "%d %d %d"        // format of the geom file
+#define GEOM_FORMAT_EXT "%d %d %d %d" // extended format of the geom file
 /* DDSCAT shape formats; several format are used, since first variable is unpredictable and last two are not actually
  * used (only to produce warnings)
  */
-static const char ddscat_format_read1[]="%*s %d %d %d %d %d %d\n";
+static const char ddscat_format_read1[]="%*s %d %d %d %d %d %d";
 static const char ddscat_format_read2[]="%*s %d %d %d %d";
 #ifndef SPARSE
 static const char ddscat_format_write[]="%zu %d %d %d %d %d %d\n";
 #endif
 // ratio of scatterer volume to enclosing cube; used for dpl correction and initialization by a_eq
 static double volume_ratio;
-static double Ndip;              // total number of dipoles (in a circumscribing cube)
+static double Ndip;              // total number of dipoles (in a circumscribing cube); has limited use in sparse mode
 static double dpl_def;           // default value of dpl
-static int minX,minY,minZ;       // minimum values of dipole positions in dipole file
-static FILE * restrict dipfile;  // handle of dipole file
-static enum shform read_format;  // format of dipole file, which is read
-static double cX,cY,cZ;          // center for DipoleCoord in units of dipoles (counted from 0)
-static double drelX,drelY,drelZ; // ratios of dipole sizes to the maximal one (dsX/dsMax...)
+static int minX,minY,minZ;       // minimum values of voxel positions in shape file
+static FILE * restrict dipfile;  // handle of dipole (shape) file
+static enum shform read_format;  // format of shape file, which is read
+static double cX,cY,cZ;          // center for DipoleCoord in units of voxels (counted from 0)
+static double drelX,drelY,drelZ; // ratios of voxel sizes to the maximal one (dsX/dsMax...)
+static double yx_ratio,zx_ratio; // ratios of particle dimensions along different axes
 
 #ifndef SPARSE
 
 // shape parameters
 static double coat_x,coat_y,coat_z,coat_r2;
+static double shell_r2,core_r2; // for coated2
 static double ad2,egnu,egeps; // for egg
 static double chebeps,r0_2; // for Chebyshev
 static int chebn; // for Chebyshev
@@ -106,8 +109,11 @@ static double hdratio,invsqY,invsqY2,invsqZ,invsqZ2,haspY,haspZ;
 static double xcenter,zcenter; // coordinates of natural particle center (in units of Dx)
 static double rc_2,ri_2; // squares of circumscribed and inscribed spheres (circles) in units of Dx
 static double boundZ,zcenter1,zcenter2,ell_rsq1,ell_rsq2,ell_x1,ell_x2;
+static double * restrict onion_r2; //for onion
+static int nlayers; // for onion
 static double rbcP,rbcQ,rbcR,rbcS; // for RBC
 static double prang; // for prism
+static double seE,seN,seT,seR,seToverR,seInvR; // for superellipsoid
 // for axisymmetric; all coordinates defined here are relative
 static double * restrict contSegRoMin,* restrict contSegRoMax,* restrict contRo,* restrict contZ;
 static double contCurRo,contCurZ;
@@ -134,7 +140,7 @@ struct segment * restrict contSeg;
 
 // temporary arrays before their real counterparts are allocated
 static unsigned char * restrict material_tmp;
-//static unsigned short * restrict position_tmp;
+static unsigned short * restrict position_tmp;
 
 #endif // !SPARSE
 
@@ -148,7 +154,7 @@ void ChebyshevParams(double eps_in,int n_in,double *dx,double *dz,double *sz,dou
 //======================================================================================================================
 
 static void SaveGeometry(void)
-// saves dipole configuration to a file
+// saves voxel configuration to a file
 {
 	char fname[MAX_FNAME];
 	FILE * restrict geom;
@@ -158,7 +164,7 @@ static void SaveGeometry(void)
 	 * Add code to this function to save geometry in new format. It should consist of:
 	 * 1) definition of default filename (by supplying an appropriate extension);
 	 * 2) writing header to the beginning of the file;
-	 * 3) writing a single line for each dipole (this is done in parallel).
+	 * 3) writing a single line for each voxel (this is done in parallel).
 	 * Each part is done in corresponding switch-case sequence
 	 */
 
@@ -221,10 +227,10 @@ static void SaveGeometry(void)
 		j=3*i;
 		switch (sg_format) {
 			case SF_TEXT:
-				fprintf(geom,geom_format,position[j],position[j+1],position[j+2]);
+				fprintf(geom,GEOM_FORMAT"\n",position[j],position[j+1],position[j+2]);
 				break;
 			case SF_TEXT_EXT:
-				fprintf(geom,geom_format_ext,position[j],position[j+1],position[j+2],material[i]+1);
+				fprintf(geom,GEOM_FORMAT_EXT"\n",position[j],position[j+1],position[j+2],material[i]+1);
 				break;
 			case SF_DDSCAT6:
 			case SF_DDSCAT7:
@@ -306,7 +312,7 @@ void InitContourSegment(struct segment * restrict seg,const bool increasing)
 
 static void InitContour(const char *fname,double *ratio,double *shSize)
 /* Reads a contour from the file, rotates it so that it starts from a local minimum in ro, then divides it into
- * monotonic (over ro) segments. It produces data, which are later used to test each dipole for being inside the
+ * monotonic (over ro) segments. It produces data, which are later used to test each voxel center for being inside the
  * contour. Segments are either weakly increasing or weakly decreasing (i.e. can contain constant parts).
  */
 {
@@ -334,7 +340,7 @@ static void InitContour(const char *fname,double *ratio,double *shSize)
 	romin=zmin=DBL_MAX;
 	romax=zmax=-DBL_MAX;
 	// reading is performed in lines
-	while(FGetsError(file,fname,&line,linebuf,BUF_LINE,ONE_POS)!=NULL) {
+	while (FGetsError(file,fname,&line,linebuf,BUF_LINE,ONE_POS)!=NULL) {
 		// scan numbers in a line
 		scanned=sscanf(linebuf,"%lf %lf",&ro,&z);
 		// if sscanf returns EOF, that is a blank line -> just skip
@@ -513,13 +519,13 @@ static inline int CheckCell(const double * restrict gr,const double * restrict v
 static size_t PlaceGranules(void)
 /* Randomly places granules inside the specified domain; Mersenne Twister is used for generating random numbers
  *
- * A simplest algorithm is used: to place randomly a sphere, and see if it overlaps with any dipoles (more exactly:
- * centers of dipoles) of not correct domain; if not, accept it and fill all this dipoles with granules' domain.
+ * A simplest algorithm is used: to place randomly a sphere, and see if it overlaps with any voxels (more exactly:
+ * with their centers) of not correct domain; if not, accept it and fill all this voxels with granules' domain.
  * Optimized to perform in two steps: First it places of set of not-intersecting granules and do only a quick check
  * against the "domain pattern" - coarse representation of the domain. On the second step granules of the whole set are
  * thoroughly checked against the whole domain on each processor. When small granules are used, no domain pattern is
- * used - makes it simpler. Intersection of two granules between the sets is checked only through dipoles, which is not
- * exact, however it allows considering arbitrary complex domains, which is described only by a set of occupied dipoles.
+ * used - makes it simpler. Intersection of two granules between the sets is checked only through voxels, which is not
+ * exact, however it allows considering arbitrary complex domains, which is described only by a set of occupied voxels.
  *
  * This algorithm is unsuitable for high volume fractions, it becomes very slow and for some volume fractions may fail
  * at all (Metropolis algorithm should be more suitable, however it is hard to code for arbitrary domains). Moreover,
@@ -532,8 +538,8 @@ static size_t PlaceGranules(void)
 {
 	int i,j,k,zerofit,last;
 	size_t n,count,count_gr,false_count,ui;
-	size_t nd;                           // number of dipoles occupied by granules
-	int index,index1,index2;             // indices for dipole grid
+	size_t nd;                           // number of dipoles (voxels) occupied by granules
+	int index,index1,index2;             // indices for voxel grid
 	int dom_index,dom_index1,dom_index2; // indices for auxiliary grid
 	int gX,gY,gZ;                        // auxiliary grid dimensions
 	size_t gXY,gr_gN;                    // ... and their products
@@ -546,7 +552,7 @@ static size_t PlaceGranules(void)
 	int locz0,locz1,locgZ,gr_locgN;
 	double R,R2,Di,Di2;          // radius and diameter of granule, and their squares
 	double x0,x1,y0,y1,z0,z1;    // where to put random number (inner box)
-	int id0,id1,jd0,jd1,kd0,kd1; // dipoles limit that fall inside inner box
+	int id0,id1,jd0,jd1,kd0,kd1; // dipoles (voxels) limit that fall inside inner box
 	int Nfit;        // number of successfully placed granules in a current set
 	double overhead; // estimate of the overhead needed to have exactly needed N of granules
 	double tmp1,tmp2,t1,t2,t3;
@@ -559,7 +565,7 @@ static size_t PlaceGranules(void)
 	unsigned short * restrict tree_index; // index for traversing granules inside one cell (small)
 	double * restrict vgran;              // coordinates of a set of granules
 	bool * restrict vfit;                 // results of granule fitting on the grid (boolean)
-	int * restrict ginX,* restrict ginY,* restrict ginZ; // indices to find dipoles inside auxiliary grid
+	int * restrict ginX,* restrict ginY,* restrict ginZ; // indices to find voxels inside auxiliary grid
 	int indX,indY,indZ;    // indices for doubled auxiliary grid
 	int bit;               // bit position in char of 'dom'
 	double gr[3];          // coordinates of a single granule
@@ -701,7 +707,7 @@ static size_t PlaceGranules(void)
 	n=count=count_gr=false_count=0;
 	nd=0;
 	// crude estimate of the probability to place a small granule into domain
-	if (sm_gr) overhead=((double)Ndip)/mat_count[gr_mat];
+	if (sm_gr) overhead=Ndip/mat_count[gr_mat];
 	else overhead=1;
 	// main cycle
 	D("Starting main iteration cycle");
@@ -731,7 +737,7 @@ static size_t PlaceGranules(void)
 					t1=gr[0]-t1; // t_i are distances to the edges
 					t2=gr[1]-t2;
 					t3=gr[2]-t3;
-					// convert to usual coordinates (in dipole grid)
+					// convert to usual coordinates (in voxel grid)
 					gr[0]=gr[0]*gdX+x0;
 					gr[1]=gr[1]*gdY+y0;
 					gr[2]=gr[2]*gdZ+z0;
@@ -863,7 +869,7 @@ static size_t PlaceGranules(void)
 					index=indZ*gXY+indY*gX+indX;
 					// two simple checks
 					if (!(dom[index]&bit) && occup[index]==MAX_GR_SET) {
-						// convert to usual coordinates (in dipole grid)
+						// convert to usual coordinates (in voxel grid)
 						gr[0]=gr[0]*gdXh+x0;
 						gr[1]=gr[1]*gdYh+y0;
 						gr[2]=gr[2]*gdZh+z0;
@@ -947,12 +953,12 @@ static size_t PlaceGranules(void)
 		}
 		// collect fits
 		ExchangeFits(vfit,cur_Ngr,&Timing_GranulComm);
-		// fit dipole grid with successive granules
+		// fit voxel grid with successive granules
 		Nfit=n;
 		for (ig=0;ig<cur_Ngr && n<gr_N;ig++) {
 			if (vfit[ig]) { // a successful granule
 				n++;
-				// fill dipoles in the sphere with granule material
+				// fill voxels in the sphere with granule material
 				memcpy(gr,vgran+3*ig,3*sizeof(double));
 				k0=MAX((int)ceil(gr[2]-R),local_z0);
 				k1=MIN((int)floor(gr[2]+R),local_z1_coer-1);
@@ -1039,13 +1045,13 @@ static size_t PlaceGranules(void)
 #endif // !SPARSE
 
 static void InitDipFile(const char * restrict fname,int *bX,int *bY,int *bZ,int *Nm,const char **rft)
-/* read dipole file first to determine box sizes and Nmat; input is not checked for very large numbers (integer
+/* read dipole (shape) file first to determine box sizes and Nmat; input is not checked for very large numbers (integer
  * overflows) to increase speed; this function opens file for reading, the file is closed in ReadDipFile.
  */
 {
 	int x,y,z,mat,scanned,mustbe;
 	size_t line,skiplines,nd;
-	double ds_Ndip; // number of dipoles declared in DDSCAT file
+	double ds_Ndip; // number of dipoles (voxels) declared in DDSCAT file
 	bool anis_warned;
 	bool ds_lf; // whether 6-th line matches pattern for DDSCAT 7 format
 	int t2,t3; // dumb variables
@@ -1100,10 +1106,10 @@ static void InitDipFile(const char * restrict fname,int *bX,int *bY,int *bZ,int 
 		fseek(dipfile,0,SEEK_SET);
 		line=SkipComments(dipfile);
 		/* scanf and analyze Nmat; if there is blank line between comments and Nmat, it fails later; the value of Nmat
-		 * obtained here is not actually relevant, the main factor is maximum domain number among all dipoles.
+		 * obtained here is not actually relevant, the main factor is maximum domain number among all voxels.
 		 */
 		scanned=fscanf(dipfile,"Nmat=%d\n",Nm);
-		if (scanned==EOF) LogError(ONE_POS,"No dipole positions are found in %s",fname);
+		if (scanned==EOF) LogError(ONE_POS,"No voxel positions are found in %s",fname);
 		else if (scanned==0) { // no "Nmat=..."
 			/* It is hard to perform rigorous test for SF_TEXT since any number of blank lines can be present before the
 			 * data lines. Therefore this format is determined by exclusion of other possibilities. Hence, errors in
@@ -1144,16 +1150,22 @@ static void InitDipFile(const char * restrict fname,int *bX,int *bY,int *bZ,int 
 	// reading is performed in lines
 	nd=0;
 	scanned=0; // redundant initialization to remove warnings
-	while(FGetsError(dipfile,fname,&line,linebuf,BUF_LINE,ONE_POS)!=NULL) {
+	while (FGetsError(dipfile,fname,&line,linebuf,BUF_LINE,ONE_POS)!=NULL) {
 		// scan numbers in a line
 		switch (read_format) {
-			case SF_TEXT: scanned=sscanf(linebuf,geom_format,&x,&y,&z); break;
-			case SF_TEXT_EXT: scanned=sscanf(linebuf,geom_format_ext,&x,&y,&z,&mat); break;
+			/* We scan extra field for ADDA formats to catch the cases when extra numbers are present and produce an
+			 * error. For instance, this can happen if an user uses multi-domain format but misses "Nmat=..." in the
+			 * beginning. However, this test is based on scanning a float number, so should ignore general text.
+			 * Also, we do not test extra fields for DDSCAT formats, since the Fortran philosophy generally allows
+			 * anything to be present after the obligatory fields.
+			 */
+			case SF_TEXT: scanned=sscanf(linebuf,GEOM_FORMAT" %f",&x,&y,&z,&td1); break;
+			case SF_TEXT_EXT: scanned=sscanf(linebuf,GEOM_FORMAT_EXT" %f",&x,&y,&z,&mat,&td1); break;
 			case SF_DDSCAT6:
 			case SF_DDSCAT7: // for ddscat formats, only first material is used, other two are ignored
 				scanned=sscanf(linebuf,ddscat_format_read1,&x,&y,&z,&mat,&t2,&t3);
 				if (!anis_warned && (t2!=mat || t3!=mat)) {
-					LogWarning(EC_WARN,ONE_POS,"Anisotropic dipoles are detected in file %s (first on line %zu). ADDA "
+					LogWarning(EC_WARN,ONE_POS,"Anisotropic voxels are detected in file %s (first on line %zu). ADDA "
 						"ignores this anisotropy, using only the identifier of x-component of refractive index as "
 						"domain number",fname,line);
 					anis_warned=true;
@@ -1162,17 +1174,17 @@ static void InitDipFile(const char * restrict fname,int *bX,int *bY,int *bZ,int 
 		}
 		/* TO ADD NEW FORMAT OF SHAPE FILE
 		 * Add code to scan a single data line and perform consistency checks if necessary. The common variables to be
-		 * scanned are 'x','y','z' (integer positions of dipoles) and possibly 'mat' - domain number. 'scanned' should
+		 * scanned are 'x','y','z' (integer positions of voxels) and possibly 'mat' - domain number. 'scanned' should
 		 * be set to be tested below.
 		 */
 		// if sscanf returns EOF, that is a blank line -> just skip
 		if (scanned!=EOF) {
 			if (scanned!=mustbe) LogError(ONE_POS,"%s was detected, but error occurred during scanning of line %zu "
-				"from dipole file %s",rf_text,line,fname); // this in most cases indicates wrong format
+				"from shape file %s",rf_text,line,fname); // this in most cases indicates wrong format
 			nd++;
 			if (read_format!=SF_TEXT) {
 				if (mat<=0) LogError(ONE_POS,"%s was detected, but nonpositive material number (%d) encountered during "
-					"scanning of line %zu from dipole file %s",rf_text,mat,line,fname);
+					"scanning of line %zu from shape file %s",rf_text,mat,line,fname);
 				else if (mat>maxN) maxN=mat;
 			}
 			/* TO ADD NEW FORMAT OF SHAPE FILE
@@ -1195,11 +1207,11 @@ static void InitDipFile(const char * restrict fname,int *bX,int *bY,int *bZ,int 
 		case SF_TEXT: break; // no specific tests
 		case SF_TEXT_EXT:
 			if (*Nm!=maxN) LogWarning(EC_WARN,ONE_POS,"Nmat (%d), as given in %s, is not equal to the maximum domain "
-				"number (%d) among all specified dipoles; hence the former is ignored",*Nm,fname,maxN);
+				"number (%d) among all specified voxels; hence the former is ignored",*Nm,fname,maxN);
 			break;
 		case SF_DDSCAT6:
 		case SF_DDSCAT7:
-			if (nd!=ds_Ndip) LogWarning(EC_WARN,ONE_POS,"Number of dipoles (%.0f), as given in the beginning of %s, is "
+			if (nd!=ds_Ndip) LogWarning(EC_WARN,ONE_POS,"Number of voxels (%.0f), as given in the beginning of %s, is "
 				"not equal to the number of data lines actually present and scanned (%zu)",ds_Ndip,fname,nd);
 			break;
 	}
@@ -1224,7 +1236,7 @@ static void InitDipFile(const char * restrict fname,int *bX,int *bY,int *bZ,int 
 //======================================================================================================================
 
 static void ReadDipFile(const char * restrict fname)
-/* read dipole file; no consistency checks are made since they are made in InitDipFile. The file is opened in
+/* read dipole (shape) file; no consistency checks are made since they are made in InitDipFile. The file is opened in
  * InitDipFile; this function only closes the file.
  *
  * The operation is quite different in FFT and sparse modes. In FFT mode only material is set here, while position is
@@ -1234,43 +1246,43 @@ static void ReadDipFile(const char * restrict fname)
 {
 	int x,y,z,x0,y0,z0,mat,scanned;
 	size_t index=0,line=0;
-	char linebuf[BUF_LINE];	
+	char linebuf[BUF_LINE];
 #ifndef SPARSE
 	// to remove possible overflows
 	size_t boxX_l=(size_t)boxX;
 #endif // !SPARSE
 
 	TIME_TYPE tstart=GET_TIME();
-	
+
 	mat=1; // the default value for single-domain shape formats
 	scanned=0; // redundant initialization to remove warnings
-	while(fgets(linebuf,BUF_LINE,dipfile)!=NULL) {
+	while (fgets(linebuf,BUF_LINE,dipfile)!=NULL) {
 		// scan numbers in a line
 		switch (read_format) {
-			case SF_TEXT: scanned=sscanf(linebuf,geom_format,&x0,&y0,&z0); break;
-			case SF_TEXT_EXT: scanned=sscanf(linebuf,geom_format_ext,&x0,&y0,&z0,&mat); break;
+			case SF_TEXT: scanned=sscanf(linebuf,GEOM_FORMAT,&x0,&y0,&z0); break;
+			case SF_TEXT_EXT: scanned=sscanf(linebuf,GEOM_FORMAT_EXT,&x0,&y0,&z0,&mat); break;
 			case SF_DDSCAT6:
 			case SF_DDSCAT7: scanned=sscanf(linebuf,ddscat_format_read2,&x0,&y0,&z0,&mat); break;
 		}
 		/* TO ADD NEW FORMAT OF SHAPE FILE
 		 * Add code to scan a single data line. The common variables to be scanned are 'x0','y0','z0' (integer positions
-		 * of dipoles) and  possibly 'mat' - domain number. 'scanned' should be set to be tested against EOF below. The
+		 * of voxels) and  possibly 'mat' - domain number. 'scanned' should be set to be tested against EOF below. The
 		 * code is similar to the one in InitDipFile() but can be simpler because no consistency checks are performed.
 		 */
 		line++;
 		// if sscanf returns EOF, that is a blank line -> just skip
 		if (scanned!=EOF) {
-			// shift dipole position to be nonnegative
+			// shift voxel position to be nonnegative
 			x0-=minX;
 			y0-=minY;
 			z0-=minZ;
-			// initialize box jagged*jagged*jagged instead of one dipole
+			// initialize box jagged*jagged*jagged instead of one voxel
 #ifndef SPARSE
 			for (z=jagged*z0;z<jagged*(z0+1);z++) if (z>=local_z0 && z<local_z1_coer)
 				for (x=jagged*x0;x<jagged*(x0+1);x++) for (y=jagged*y0;y<jagged*(y0+1);y++) {
 					index=(z-local_z0)*boxXY+y*boxX_l+x;
 					if (material_tmp[index]!=Nmat)
-						LogError(ONE_POS,"Duplicate dipole was found at line %zu in dipole file %s",line,fname);
+						LogError(ONE_POS,"Duplicate voxel was found at line %zu in shape file %s",line,fname);
 					material_tmp[index]=(unsigned char)(mat-1);
 			}
 #else
@@ -1305,17 +1317,17 @@ static int FitBox(const int box)
 //======================================================================================================================
 
 static int FitBox_yz(const double size)
-/* given the size of the particle in y or z direction (in units of dipoles), finds the closest grid size, which would
+/* given the size of the particle in y or z direction (in units of voxels), finds the closest grid size, which would
  * satisfy the FitBox function. The rounding is performed so to minimize the maximum difference between the stack of
- * dipoles and corresponding particle dimension.
- * The distance between the center of the outer super-dipole (J^3 original dipoles) and the particle (enclosing box)
+ * voxels and corresponding particle dimension.
+ * The distance between the center of the outer super-dipole (J^3 original voxels) and the particle (enclosing box)
  * boundary is between 0.25 and 0.75 of super-dipole size, corresponding to the discretization along the x-axis, for
- * which the optimum distance of 0.5 (the dipole cube fits tight into the boundary) is automatically satisfied.
- * 
- * !!! However, it is still possible that the whole outer layer of dipoles would be void because the estimate does not
+ * which the optimum distance of 0.5 (the voxel fits tight into the boundary) is automatically satisfied.
+ *
+ * !!! However, it is still possible that the whole outer layer of voxels would be void because the estimate does not
  * take into account the details of the shape e.g. its curvature. For instance, 'adda -grid 4 -shape ellipsoid 1 2.13'
- * results in grid 4x4x9, but the layers z=0, z=8 will be void. This is because the dipole centers in this layers always
- * have non-zero x and y coordinates (at least half-dipole in absolute value) and do not fall inside the ellipsoid,
+ * results in grid 4x4x9, but the layers z=0, z=8 will be void. This is because the voxel centers in this layers always
+ * have non-zero x and y coordinates (at least half-voxel in absolute value) and do not fall inside the ellipsoid,
  * although the points {+-4,0,0} do fall into it.
  */
 {
@@ -1331,7 +1343,6 @@ void InitShape(void)
 {
 	int n_boxX,n_boxY,n_boxZ; // new values for dimensions
 	double n_sizeX; // new value for size
-	double yx_ratio,zx_ratio;
 	double tmp1,tmp2;
 	double rsMax; // maximum of rectScale*
 #ifndef SPARSE
@@ -1367,7 +1378,7 @@ void InitShape(void)
 		if (tmp2<tmp1) tmp2=tmp1;
 	}
 	dpl_def=10*sqrt(tmp2);
-	// initialize relative dipole sizes
+	// initialize relative voxel sizes
 	rsMax=MAX(rectScaleX,MAX(rectScaleY,rectScaleZ));
 	drelX=rectScaleX/rsMax;
 	drelY=rectScaleY/rsMax;
@@ -1480,29 +1491,25 @@ void InitShape(void)
 			break;
 		}
 		case SH_BOX: {
-			double aspectY,aspectZ;
-
 			if (sh_Npars==0) {
 				if (IFROOT) sh_form_str1="cube; size of edge along x-axis:";
-				aspectY=aspectZ=1;
+				yx_ratio=zx_ratio=1;
 			}
 			else { // 2 parameters are given
-				aspectY=sh_pars[0];
-				TestPositive(aspectY,"aspect ratio y/x");
-				aspectZ=sh_pars[1];
-				TestPositive(aspectZ,"aspect ratio z/x");
+				yx_ratio=sh_pars[0];
+				TestPositive(yx_ratio,"aspect ratio y/x");
+				zx_ratio=sh_pars[1];
+				TestPositive(zx_ratio,"aspect ratio z/x");
 				if (IFROOT) {
 					sh_form_str1="rectangular parallelepiped; size along x-axis:";
-					sh_form_str2=dyn_sprintf(", aspect ratio y/x="GFORM", z/x="GFORM,aspectY,aspectZ);
+					sh_form_str2=dyn_sprintf(", aspect ratio y/x="GFORM", z/x="GFORM,yx_ratio,zx_ratio);
 				}
 			}
-			if (aspectY!=1) symR=false;
+			if (yx_ratio!=1) symR=false;
 			// set half-aspect ratios
-			haspY=aspectY/2;
-			haspZ=aspectZ/2;
-			volume_ratio=aspectY*aspectZ;
-			yx_ratio=aspectY;
-			zx_ratio=aspectZ;
+			haspY=yx_ratio/2;
+			haspZ=zx_ratio/2;
+			volume_ratio=yx_ratio*zx_ratio;
 			Nmat_need=1;
 			break;
 		}
@@ -1579,6 +1586,25 @@ void InitShape(void)
 			Nmat_need=2;
 			break;
 		}
+		case SH_COATED2: {
+			double shell_ratio, core_ratio;
+
+			shell_ratio=sh_pars[0];
+			core_ratio=sh_pars[1];
+			TestRangeII(shell_ratio,"intermediate/outer diameter ratio",0,1);
+			TestRangeII(core_ratio,"inner/outer diameter ratio",0,shell_ratio);
+			if (IFROOT) {
+				sh_form_str1="coated2; diameter(d):";
+				sh_form_str2=dyn_sprintf(", intermediate sphere (shell) diameter dcs/d="GFORM", inner core diameter "
+					"dc/d="GFORM,shell_ratio,core_ratio);
+			}
+			shell_r2=0.25*shell_ratio*shell_ratio;
+			core_r2=0.25*core_ratio*core_ratio;
+			volume_ratio=PI_OVER_SIX;
+			yx_ratio=zx_ratio=1;
+			Nmat_need=3;
+			break;
+		}
 		case SH_CYLINDER: {
 			double diskratio;
 
@@ -1599,8 +1625,8 @@ void InitShape(void)
 			/* determined by equation: (a/r)^2=1+nu*cos(theta)-(1-eps)cos^2(theta) or equivalently:
 			 * a^2=r^2+nu*r*z-(1-eps)z^2. Parameters must be 0<eps<=1, 0<=nu<eps. This shape is proposed in:
 			 * Hahn D.V., Limsui D., Joseph R.I., Baldwin K.C., Boggs N.T., Carr A.K., Carter C.C., Han T.S., and
-			 * Thomas M.E. "Shape characteristics of biological spores", paper 6954-31 to be presented at
-			 * "SPIE Defence + Security", March 2008
+			 * Thomas M.E. "Shape characteristics of biological spores", paper 6954-31, presented at
+			 * "SPIE Defense + Security", March 2008
 			 */
 			double ad;
 			double ct,ct2; // cos(theta0) and its square
@@ -1641,23 +1667,19 @@ void InitShape(void)
 			break;
 		}
 		case SH_ELLIPSOID: {
-			double aspectY,aspectZ;
-
-			aspectY=sh_pars[0];
-			TestPositive(aspectY,"aspect ratio y/x");
-			aspectZ=sh_pars[1];
-			TestPositive(aspectZ,"aspect ratio z/x");
+			yx_ratio=sh_pars[0];
+			TestPositive(yx_ratio,"aspect ratio y/x");
+			zx_ratio=sh_pars[1];
+			TestPositive(zx_ratio,"aspect ratio z/x");
 			if (IFROOT) {
 				sh_form_str1="ellipsoid; size along x-axis:";
-				sh_form_str2=dyn_sprintf(", aspect ratios y/x="GFORM", z/x="GFORM,aspectY,aspectZ);
+				sh_form_str2=dyn_sprintf(", aspect ratios y/x="GFORM", z/x="GFORM,yx_ratio,zx_ratio);
 			}
-			if (aspectY!=1) symR=false;
+			if (yx_ratio!=1) symR=false;
 			// set inverse squares of aspect ratios
-			invsqY=1/(aspectY*aspectY);
-			invsqZ=1/(aspectZ*aspectZ);
-			volume_ratio=PI_OVER_SIX*aspectY*aspectZ;
-			yx_ratio=aspectY;
-			zx_ratio=aspectZ;
+			invsqY=1/(yx_ratio*yx_ratio);
+			invsqZ=1/(zx_ratio*zx_ratio);
+			volume_ratio=PI_OVER_SIX*yx_ratio*zx_ratio;
 			Nmat_need=1;
 			break;
 		}
@@ -1670,6 +1692,54 @@ void InitShape(void)
 			volume_ratio=UNDEF;
 			Nmat_need=1;
 			break;
+		case SH_ONION: {
+			nlayers=sh_Npars+1;
+			MALLOC_VECTOR(onion_r2,double,nlayers-1,ALL);
+			for (i=0;i<sh_Npars;i++) {
+				if (i==0) TestRangeII(sh_pars[i],"diameter ratio d2/d",0,1);
+				else TestRangeII(sh_pars[i],"one of internal diameter ratios",0,sh_pars[i-1]);
+				onion_r2[i]=0.25*sh_pars[i]*sh_pars[i];
+				}
+			if (IFROOT) {
+				char *layer_str;
+				sh_form_str1=dyn_sprintf("onion (%d layers); diameter(d):",nlayers);
+				layer_str=dyn_sprintf(", internal diameter ratios d_i/d: ("GFORM,sh_pars[0]);
+				for (i=1;i<sh_Npars;i++) layer_str=rea_sprintf(layer_str,", "GFORM,sh_pars[i]);
+				sh_form_str2=rea_sprintf(layer_str,")");
+			}
+			yx_ratio=zx_ratio=1;
+			Nmat_need=nlayers;
+			volume_ratio=PI_OVER_SIX;
+			break;
+		}
+		case SH_ONION_ELL: {
+			yx_ratio=sh_pars[0];
+			TestPositive(yx_ratio,"aspect ratio y/x");
+			zx_ratio=sh_pars[1];
+			TestPositive(zx_ratio,"aspect ratio z/x");
+			nlayers=sh_Npars-1;
+			MALLOC_VECTOR(onion_r2,double,nlayers-1,ALL);
+			for (i=2;i<sh_Npars;i++) {
+				if (i==2) TestRangeII(sh_pars[i],"semi-axis ratio x2/x",0,1);
+				else TestRangeII(sh_pars[i],"one of internal semi-axis ratios",0,sh_pars[i-1]);
+				onion_r2[i-2]=0.25*sh_pars[i]*sh_pars[i];
+			}
+			if (IFROOT) {
+				char *layer_str;
+				sh_form_str1=dyn_sprintf("%d-layered ellipsoid; size along x-axis:",nlayers);
+				layer_str=dyn_sprintf(", aspect ratios y/x="GFORM", z/x="GFORM", internal semi-axis ratios x_i/x: ("
+					GFORM,yx_ratio,zx_ratio,sh_pars[2]);
+				for (i=3;i<sh_Npars;i++) layer_str=rea_sprintf(layer_str,", "GFORM,sh_pars[i]);
+				sh_form_str2=rea_sprintf(layer_str,")");
+			}
+			if (yx_ratio!=1) symR=false;
+			Nmat_need=nlayers;
+			volume_ratio=PI_OVER_SIX*yx_ratio*zx_ratio;
+			// set inverse squares of aspect ratios
+			invsqY=1/(yx_ratio*yx_ratio);
+			invsqZ=1/(zx_ratio*zx_ratio);
+			break;
+		}
 		case SH_PLATE: {
 			double diskratio; // ratio of height to diameter
 
@@ -1792,6 +1862,47 @@ void InitShape(void)
 			Nmat_need=2;
 			break;
 		}
+		case SH_SUPERELLIPSOID: {
+			// Read and test parameters
+			yx_ratio=sh_pars[0];
+			TestPositive(yx_ratio,"aspect ratio b/a");
+			zx_ratio=sh_pars[1];
+			TestPositive(zx_ratio,"aspect ratio c/a");
+			seE=sh_pars[2];
+			TestNonNegative(seE,"superellipsoid exponent e");
+			seN=sh_pars[3];
+			TestNonNegative(seN,"superellipsoid exponent n");
+			// Has reflection symmetry across all 3 axes, but 90 degree rotation symmetry about z - only if a=b
+			if (yx_ratio!=1) symR=false;
+			if (IFROOT) {
+				sh_form_str1="superellipsoid; size along x-axis:";
+				sh_form_str2=dyn_sprintf(", aspect ratios b/a="GFORM", c/a="GFORM", exponents e="GFORM", n="GFORM,
+					yx_ratio,zx_ratio,seE,seN);
+				}
+			Nmat_need=1;
+			/* Volume is given analytically by Eq.(4) in T. Wriedt, "Using the T-matrix method for light scattering
+			 * computations by non-axisymmetric particles: Superellipsoids and realistically shaped particles," Part.
+			 * Part. Syst. Charact. 19, 256-268 (2002).
+			 * Since the relevant box volume is 8a^3, the volume ratio (1/4)(b/a)(c/a)*n*B(n/2 +1,n)*e*B(e/2,e/2).
+			 * Both n*B(n/2 +1,n) and e*B(e/2,e/2) are continuous to zero, and can be reliably computed using lgamma.
+			 * Still we need to explicitly handle edge cases when n or e are 0.
+			 */
+			// tmp1=n*B(n/2+1,n)
+			if (seN==0) tmp1=1;
+			else tmp1=exp(log(seN) + lgamma(seN/2+1) + lgamma(seN) - lgamma(3*seN/2+1));
+			// tmp2=e*B(e/2,e/2)
+			if (seE==0) tmp2=4;
+			else tmp2=exp(log(seE) + 2*lgamma(seE/2) - lgamma(seE));
+			volume_ratio=0.25*yx_ratio*zx_ratio*tmp1*tmp2;
+			// set additional parameters when possible
+			seInvR=seE/2;
+			if (seE!=0) seR=2/seE;
+			if (seN!=0) {
+				seT=2/seN;
+				seToverR=seE/seN;
+			}
+			break;
+		}
 #endif // !SPARSE
 		case SH_READ: { // it is first, because always relevant
 			symX=symY=symZ=symR=false; // input file is assumed fully asymmetric
@@ -1821,13 +1932,14 @@ void InitShape(void)
 	 *     instance, sh_form_str1="name; diameter:", sh_form_str2=", parameter=5" would result in the final line like:
 	 *     "name; diameter:10, parameter=5". So you should NOT include sizeX into these strings, and sh_form_str2 can be
 	 *     omitted if not needed.
-	 * Either yx_ratio (preferably) or n_boxY. The former is a ratio of particle sizes along y and x axes. Initialize
-	 *     n_boxY directly only if it is not proportional to boxX, like in shape LINE above, since boxX is not
-	 *     initialized at this moment. If yx_ratio is not initialized, set it explicitly to UNDEF.
+	 * Either yx_ratio (preferably) or n_boxY. The former is a ratio of particle sizes along y and x axes. It can be set
+	 *     directly by input parameters or calculated afterwards. Initialize n_boxY directly only if it is not
+	 *     proportional to boxX, like in shape LINE above, since boxX is not initialized at this moment. If yx_ratio is
+	 *     not initialized, set it explicitly to UNDEF.
 	 * Analogously either zx_ratio (preferably) or n_boxZ.
 	 * Nmat_need - number of different domains in this shape (void is not included)
-	 * volume_ratio - ratio of particle volume to (boxX)^3. Initialize it if it can be calculated analytically or set to
-	 *                UNDEF otherwise. This parameter is crucial if one wants to initialize computational grid from
+	 * volume_ratio - ratio of particle volume to (sizeX)^3. Initialize it if it can be calculated analytically or set
+	 *                to UNDEF otherwise. This parameter is crucial if one wants to initialize computational grid from
 	 *                '-eq_rad' and '-dpl'.
 	 * n_boxX - grid size for the particle, defined by shape; initialize only when relevant, e.g. for shapes such as
 	 *          'read'.
@@ -1955,18 +2067,19 @@ void InitShape(void)
 		// this error is not duplicated in the log file since it does not yet exist
 		if (n_boxY>boxY || n_boxZ>boxZ)
 			PrintError("Particle (boxY,Z={%d,%d}) does not fit into specified boxY,Z={%d,%d}",n_boxY,n_boxZ,boxY,boxZ);
-		// redundant void dipoles may break the symmetry with respect to the center of the whole box
+		// redundant void voxels may break the symmetry with respect to the center of the whole box
 		if (IS_ODD((boxY-n_boxY)/jagged)) symY=false;
 		if (IS_ODD((boxZ-n_boxZ)/jagged)) symZ=false;
 	}
-#ifndef SPARSE //this check is not needed in sparse mode
-	// initialize number of dipoles; first check that it fits into size_t type
-	double tmp=((double)boxX)*((double)boxY)*((double)boxZ);
-	if (tmp > SIZE_MAX) LogError(ONE_POS,"Total number of dipoles in the circumscribing box (%.0f) is larger than "
+	Ndip=((double)boxX)*((double)boxY)*((double)boxZ);
+#ifndef SPARSE
+	/* Ndip can be arbitrary huge in sparse mode, but then it's not used for any loop bounds (like nvoid_Ndip)
+	 * Otherwise, it has to fit into size_t bounds
+	 */
+	if (Ndip > SIZE_MAX) LogError(ONE_POS,"Total number of voxels in the circumscribing box (%.0f) is larger than "
 		"supported by size_t type on this system (%zu). If possible, recompile ADDA in 64-bit mode.",
-		tmp,SIZE_MAX);
+		Ndip,SIZE_MAX);
 #endif // !SPARSE
-	Ndip=boxX*boxY*boxZ;
 	// initialize maxiter; not very realistic
 	if (maxiter==UNDEF) maxiter=MIN(INT_MAX,3*Ndip);
 	// some old, not really logical heuristics for Ntheta, but better than constant value
@@ -1980,96 +2093,43 @@ void InitShape(void)
 }
 
 //======================================================================================================================
-//added on 5.01.22.
-bool EdgeIn(int i,int j,double nv[8],double res[3])
-/* Finds intersection of plane n.r=1 with edges of the unit cube [-0.5,0.5]x[-0.5,0.5]x[-0.5,0.5]. Coordinates of 
- * cube vertices are given by static array v below. n is provided by its scalar products with v - by vector nv.
- * i and j are indices of adjacent vertices, defining the edge. Returns true if intersection is
- * inside the edge. Then (only if true) coordinates of the intersection are stored in res.
- * This code is based on https://cococubed.com/code_pages/raybox.shtml by F.X.Timmes
+
+static inline int DescendingSearch(const double key,const double *arr,const int n) 
+/* given array sorted in descending order (of size n), returns i such that arr[i-1] <= key < arr[i]
+ * specifically, returns 0 for key < arr[0] and n for arr[n-1] <= key .
+ * If arr[i-1]=key=arr[i] the returned value can be either i or i-1 (depending on implementation).
+ * Currently, the simplest linear search is used. Writing a well-optimized version for n ~ 100 is not-trivial.
  */
 {
-	static const double v[8][3]={{-0.5,-0.5,-0.5},{0.5,-0.5,-0.5},{-0.5,0.5,-0.5},{-0.5,-0.5,0.5},{0.5,-0.5,0.5},
-	{0.5,0.5,-0.5},{-0.5,0.5,0.5},{0.5,0.5,0.5}};
-	bool cond;
-	double t;
-
-	if (nv[i]==nv[j]) cond=false;
-	else {
-		t=(1-nv[i])/(nv[j]-nv[i]);
-		cond=(t>=0 && t<=1);
-		if (cond) LinComb(v[i],v[j],1-t,t,res);
-	}
-	return cond;
-}
-
-//==========================================================
-
-double VolumeFraction(double a,double b,double c)
-/*Computes the volume fraction of the principal part (p) for the [-0.5,0.5]x[-0.5,0.5]x[-0.5,0.5] cube. A ready-to-use 
-formula already exists for the evaluation of volume fraction based on the [0,1]x[0,1]x[0,1] cube and its intersection
-vertices given by double nv[8]={0,a,b,c,a+c,a+b,b+c,a+b+c}. It requires some transformation of plane coefficients a,b,c 
-to ensure that volume fraction is consistent with the change of origin.
-The general formula (works for a,b,c non-negative) is f0=[1-h(a)-h(b)-h(c)+h(a+b)+h(a+c)+h(b+c)-h(a+b+c)]/(6abc), where
- h(r)=(1-r)^3, 0<r<1 and 0 otherwise.
-The function optimizes the formula for speed and takes care of coefficients close to zero through some sorting algorithm
-for plane coefficients and explicit expressions for the pyramidal decomposition.*/
-{
-	a = fabs(a); b = fabs(b); c = fabs(c);
-
-	// Sort a,b,c in ascending order
-	if (a > b) {double tmp = a; a = b; b = tmp;}
-	if (b > c) {double tmp = b; b = c; c = tmp;}
-	if (a > b) {double tmp = a; a = b; b = tmp;}
-
-	// Transformation coefficient :
-	double gamma = (a + b + c) / 2.0 - 1.0;
-	if (gamma <= 0.0) return 1.0;
-
-	// Rescale gamma to avoid overflows
-	if (1/gamma<DBL_EPSILON) {
-		a /= gamma;
-		b /= gamma;
-		c /= gamma;
-		gamma = 1.0;
-	}
-	double res;
-	if (a >= gamma)
-		res = gamma * gamma * gamma / (3.0 * a * b);
-	else if (b >= gamma)
-		res = (3.0 * gamma * gamma - 3.0 * a * gamma + a * a) / (3.0 * b);
-	else if (a + b >= gamma) {
-		res = (a * (3.0 * gamma * gamma - 3.0 * a * gamma + a * a)
-					- pow(gamma - b, 3.0));
-		if (c <= gamma) res -= pow(gamma - c, 3.0);
-		res /= (3.0 * a * b);
-	}
-	else if (c >= gamma)
-		res = 2.0 * gamma - a - b;
-	double vf = 1.0 - res / (2.0 * c);
-	return vf;
-}
-//======================================================================================================================
-void MakeParticle(void)
-// creates a particle; initializes all dipoles counts, dpl, dipole sizes
-{
+	int i;
 	
-	size_t index,dip;
+	for (i=0;i<n;i++) if (key>arr[i]) return i;
+	return n;
+}	
+
+//======================================================================================================================
+
+void MakeParticle(void)
+// creates a particle; initializes all voxel counts, dpl, voxel sizes
+{
+
+	size_t index,dip,i3;
 	TIME_TYPE tstart;
 	int i;
 #ifndef SPARSE
 	size_t local_nRows_tmp;
-	int j,k,ns;	
+	int j,k,ns;
 	double tmp1,tmp2,tmp3;
 	double a, b, c; //coefficients determining the plane
 	double temp_plane; //used for a, b, c calculation
 	doublecomplex temp1, temp2, temp3;
 	double xr,yr,zr;  // dipole coordinates relative to sizeX. xr is inside (-1/2,1/2), others - based on aspect ratios
+	double xn,yn,zn;
 	double xcoat,ycoat,zcoat,r2,ro2,z2,zshift,xshift;
 	int local_z0_unif; // should be global or semi-global
 	int largerZ,smallerZ; // number of larger and smaller z in intersections with contours
-	/* The following are dipole coordinates (in units of d/2) relative to the grid center. For jagged they point to the 
-	 * center of a larger dipole. Units are chosen to keep integer (otherwise half-integers are possible), but the step 
+	/* The following are voxel coordinates (in units of d/2) relative to the grid center. For jagged they point to the
+	 * center of a larger cuboid. Units are chosen to keep integer (otherwise half-integers are possible), but the step
 	 * of variation is 2*jagged.
 	 */
 	int xj,yj,zj;
@@ -2088,16 +2148,15 @@ void MakeParticle(void)
 	 * variables defined above.
 	 */
 	tstart=GET_TIME();
-	//index=0;
-	
+
 	cX=(boxX-1)/2.0;
 	cY=(boxY-1)/2.0;
 	cZ=(boxZ-1)/2.0;
-		
+
 #ifndef SPARSE //shapes other than "read" are disabled in sparse mode
-	index=0;	
+	index=0;
 	local_nRows_tmp=MultOverflow(3,local_Ndip,ALL_POS,"local_nRows_tmp");
-	
+
 	/* allocate temporary memory; even if prognosis, since they are needed for exact estimation; they will be
 	 * reallocated afterwards (when local_nRows is known).
 	 */
@@ -2112,10 +2171,10 @@ void MakeParticle(void)
 		xj=2*jagged*(i/jagged)+jagged-boxX;
 		yj=2*jagged*(j/jagged)+jagged-boxY;
 		zj=2*jagged*(k/jagged)+jagged-boxZ;
-		/* all the following coordinates should be scaled by the same sizeX. So we scale xj,yj,zj by 2boxX with extra 
-		 * ratio for rectangular dipoles. Thus, yr and zr are not necessarily in fixed ranges (like from -1/2 to 1/2). 
-		 * This is done to treat adequately cases when particle dimensions are the same (along different axes), but e.g. 
-		 * boxY!=boxX (so there are some extra void dipoles). All anisotropies in the particle itself are treated in 
+		/* all the following coordinates should be scaled by the same sizeX. So we scale xj,yj,zj by 2boxX with extra
+		 * ratio for rectangular voxels. Thus, yr and zr are not necessarily in fixed ranges (like from -1/2 to 1/2).
+		 * This is done to treat adequately cases when particle dimensions are the same (along different axes), but e.g.
+		 * boxY!=boxX (so there are some extra void voxels). All anisotropies in the particle itself are treated in
 		 * the specific shape modules below (see e.g. ELLIPSOID).
 		 */
 		xr=(0.5*xj)/boxX;
@@ -2123,7 +2182,7 @@ void MakeParticle(void)
 		zr=(0.5*zj)/boxX*(rectScaleZ/rectScaleX);
 
 		mat=Nmat; // corresponds to void
-		vf=1;
+		vf=0;
 
 		switch (shape) {
 			case SH_AXISYMMETRIC:
@@ -2173,6 +2232,10 @@ void MakeParticle(void)
 				}
 				break;
 			case SH_BOX:
+				if(use_wd||use_ema){
+					if(!rectDip && haspY==0.5 && haspZ==0.5) mat=0;
+					else PrintError("Weighted discretization currently works only for cubes discretized using cubical voxels");
+				}
 				if (fabs(yr)<=haspY && fabs(zr)<=haspZ) mat=0;
 				break;
 			case SH_CAPSULE:
@@ -2196,7 +2259,7 @@ void MakeParticle(void)
 				}
 				break;
 			case SH_COATED:
-				if (xr*xr+yr*yr+zr*zr<=0.25) { // first test to skip some dipoles immediately)
+				if (xr*xr+yr*yr+zr*zr<=0.25) { // first test to skip some voxels immediately)
 					xcoat=xr-coat_x;
 					ycoat=yr-coat_y;
 					zcoat=zr-coat_z;
@@ -2204,53 +2267,53 @@ void MakeParticle(void)
 					else mat=0;
 				}
 				break;
+			case SH_COATED2:
+				r2=xr*xr+yr*yr+zr*zr;
+				if (r2<=0.25) {
+					if (r2<=core_r2) mat=2;
+					else if (r2<=shell_r2) mat=1;
+					else mat=0;
+				}
+				break;
 			case SH_CYLINDER:
-				if (use_wd)
-				{
-				tmp1 = 2*dh*(fabs(xr)+fabs(yr));
-				r2 = xr*xr + yr*yr - tmp1 + 2*dh*dh;
-				if (r2 <= 0.25 && (fabs(zr)-dh) <= hdratio)
-					{
-						mat = 0;
-						if (r2+2*tmp1 > 0.25 && (fabs(zr)+dh) < hdratio)
+				if(use_wd||use_ema){
+					tmp1=2*dh*(fabs(xr)+fabs(yr));
+					r2=xr*xr+yr*yr;
+					if(r2+tmp1+2*dh*dh<=0.25&&(fabs(zr)+dh)<=hdratio || xr==0 && yr==0 && zr==0){
+						mat=0;
+						vf=1;
+					}
+					else if(r2-tmp1+2*dh*dh<=0.25&&(fabs(zr)-dh)<=hdratio){
+						mat=0;
+						vf=0;
+						bool disk=(r2+tmp1+2*dh*dh>0.25);
+						bool wall=(fabs(zr)+dh>hdratio);
+						if(disk && !wall)
 						{
-							vf=0;
-							if (r2==0)
-								{
-								a=b=2*dh/sqrt(0.75); //may happen for very small grid sizes
-								c=0;
-								}
-
-							temp_plane = 2*dh/(sqrt(r2*0.25)-r2);
-							a = temp_plane*(fabs(xr)-dh);
-							b = temp_plane*(fabs(yr)-dh);
-							c = 0;
+							if(fabs(r2-0.25)<FLT_EPSILON)r2+=FLT_EPSILON;
+							temp_plane=2*dh/(sqrt(r2*0.25)-r2);
+							a=temp_plane*xr;
+							b=temp_plane*yr;
+							c=0;
 						}
-						if (r2+2*tmp1 > 0.25 && (fabs(zr)+dh) > hdratio)
+						else if(!disk && wall)
 						{
-							vf=0;
-							if (r2==0) a=b=c=2*dh/sqrt(0.75); //may happen for very small grid sizes
-							tmp1 = 2*dh*(fabs(xr)+fabs(yr)+fabs(zr));
-							r2 = xr*xr + yr*yr + zr*zr - tmp1 + 3*dh*dh;
-							temp_plane = 2*dh/(sqrt(r2*0.25)-r2);
-							a = temp_plane*(fabs(xr)-dh);
-							b = temp_plane*(fabs(yr)-dh);
-							c = temp_plane*(fabs(zr)-dh);
+							a=0;
+							b=0;
+							c=SIGN(zr)/hdratio;
 						}
-						if (r2+2*tmp1 < 0.25 && (fabs(zr)+dh) > hdratio)
+						else if(disk && wall)
 						{
-							vf=0;
-							if (r2==0) a=b=c=2*dh/sqrt(0.75); //may happen for very small grid sizes
-							a = 0;
-							b = 0;
-							c = 1/hdratio;
-							//if (zr>=0) c = 1/hdratio;
-							//else c=-1/hdratio;
+							if(fabs(r2-0.25)<FLT_EPSILON)r2+=FLT_EPSILON;
+							temp_plane=2*dh/(sqrt(r2*0.25)-r2);
+							a=temp_plane*xr;
+							b=temp_plane*yr;
+							c=SIGN(zr)/hdratio;
 						}
 					}
 				}
-				else if(xr*xr+yr*yr<=0.25 && fabs(zr)<=hdratio) mat=0;
-
+				else if (xr*xr+yr*yr<=0.25 && fabs(zr)<=hdratio)
+					mat=0;
 				break;
 			case SH_EGG:
 				ro2=xr*xr+yr*yr;
@@ -2267,9 +2330,18 @@ void MakeParticle(void)
 				 */
 				if ((yj==0 || yj==-jagged) && (zj==0 || zj==-jagged)) mat=0;
 				break;
+			case SH_ONION:
+				r2=xr*xr+yr*yr+zr*zr;
+				if (r2<=0.25) mat=DescendingSearch(r2,onion_r2,nlayers-1);
+				break;
+			case SH_ONION_ELL:
+				r2=xr*xr+yr*yr*invsqY+zr*zr*invsqZ;
+				// only consider voxels inside particle
+				if (r2<=0.25) mat=DescendingSearch(r2,onion_r2,nlayers-1);
+				break;
 			case SH_PLATE:
 				ro2=xr*xr+yr*yr;
-				if(ro2<=0.25 && fabs(zr)<=hdratio) {
+				if (ro2<=0.25 && fabs(zr)<=hdratio) {
 					if (ro2<=ri_2) mat=0;
 					else {
 						tmp1=sqrt(ro2)-0.5+hdratio; // ro-ri
@@ -2280,10 +2352,10 @@ void MakeParticle(void)
 			case SH_PRISM:
 				xshift=xr-xcenter;
 				ro2=xshift*xshift+yr*yr;
-				if(ro2<=rc_2 && fabs(zr)<=hdratio) {
+				if (ro2<=rc_2 && fabs(zr)<=hdratio) {
 					if (ro2<=ri_2) mat=0;
 					/* this can be optimized considering special cases for small N. For larger N the relevant
-					 * fraction of dipoles decrease as N^-2, so this part is less problematic.
+					 * fraction of voxels decrease as N^-2, so this part is less problematic.
 					 */
 					else {
 						tmp1=cos(fmod(fabs(atan2(yr,xshift))+prang,2*prang)-prang);
@@ -2301,22 +2373,20 @@ void MakeParticle(void)
 			/*A sphere of diameter D centered at a distance |r0| from the voxel center is considered. Some conditions on both
 			nearest and furthest corners are used to determine whether the voxel is partially inside the sphere, depending on
 			the squared distance |r0|^2. Some threshold is added to prevent singularities in a,b,c*/
-				if (use_wd) //Assumes that WD is used
+				if (use_wd||use_ema) //Assumes that WD is used
 				{
 				tmp1 = 2*dh*(fabs(xr)+fabs(yr)+fabs(zr)); // 2(x0+y0+z0)d/2
 				r2=xr*xr+yr*yr+zr*zr; // |r0|^2=x0^2+y0^2+z0^2
-				if (r2-tmp1+3*dh*dh<0.25) //If the nearest corner is inside the sphere (f>0),...
+				if (r2-tmp1+3*dh*dh<0.25 || xr==0 && yr==0 && zr==0) //If the nearest corner is inside the sphere (f>0),...
 				 {
 					mat=0; //..., then the scatterer material is assigned
+					vf=1;
 					if (r2+tmp1+3*dh*dh>0.25) //If the furthest corner is outside the sphere (f<1),...
 						{
 							vf=0;
-							if (abs(r2-0.25)<FLT_EPSILON) //Plane crosses the voxel center (f=1/2)
-								{
-								r2+=FLT_EPSILON;
+							//Plane crosses the voxel center (f=1/2)
+							if (abs(r2-0.25)<FLT_EPSILON) r2+=FLT_EPSILON;
 								temp_plane = 2*dh/(sqrt(r2*0.25)-r2);
-							}
-							else temp_plane = 2*dh/(sqrt(r2*0.25)-r2);
 								a = temp_plane*(xr);
 								b = temp_plane*(yr);
 								c = temp_plane*(zr);
@@ -2328,6 +2398,39 @@ void MakeParticle(void)
 			case SH_SPHEREBOX:
 				if (xr*xr+yr*yr+zr*zr<=coat_r2) mat=1;
 				else if (fabs(yr)<=0.5 && fabs(zr)<=0.5) mat=0;
+				break;
+			case SH_SUPERELLIPSOID:
+				xn=fabs(2*xr);
+				yn=fabs(2*yr/yx_ratio);
+				zn=fabs(2*zr/zx_ratio);
+				// separate check for bounding box to avoid overflows in power functions
+				if (yn<=1 && zn<=1) {
+					/* First we consider zero e and n, then use two separate ways to separate the powers in
+					 * (xn^r + yn^r)^(t/r): either, (...)^(t/r) or (...)^t. This ensures that we do not have very small
+					 * value (susceptible to underflow) taken to a large power or vice versa. Moreover, the description
+					 * is continuous with decreasing n and/or e. Although the cases of n=0 or e=0 still need a separate
+					 * if clause, they do appear as natural limiting cases.
+					 */
+					if (seN==0 && seE==0) mat=0; // a box
+					else if (seE > MIN(seN,1)) { // implies that e!=0
+						/* n=0 => xy-sections are superellipses independent of z, while xz- and yz-sections are
+						 * rectangles
+						 */
+						tmp1=pow(xn,seR) + pow(yn,seR);
+						if (tmp1<=1 && (seN==0 || pow(tmp1,seToverR) + pow(zn,seT) <= 1) ) mat=0;
+					}
+					else { // here n!=0
+						/* e=0 => xz- and yz-sections are superellipses independent of y and x, respectively, while
+						 * xy-sections are rectangles
+						 */
+						if (seE==0) tmp1=MAX(xn,yn);
+						// in the following we ensure that the argument taken to (potentially large) power r is <=1
+						else if (xn<yn) tmp1=yn*pow(1+pow(xn/yn,seR),seInvR);
+						else if (xn>yn) tmp1=xn*pow(1+pow(yn/xn,seR),seInvR);
+						else tmp1=yn*pow(2,seInvR);
+						if (pow(tmp1,seT) + pow(zn,seT) <= 1) mat=0;
+					}
+				}
 				break;
 		}
 		/* TO ADD NEW SHAPE
@@ -2363,7 +2466,7 @@ void MakeParticle(void)
 	memory+=3*sizeof(int)*nvoid_Ndip+sizeof(char)*local_nvoid_Ndip;
 #endif // SPARSE
 	if (shape==SH_READ) ReadDipFile(shape_fname);
-	// initialization of mat_count and dipoles counts
+	// initialization of mat_count and dipole (voxel) counts
 	for(i=0;i<=Nmat;i++) mat_count[i]=0;
 #ifdef SPARSE
 	for(dip=0;dip<local_Ndip;dip++) mat_count[material[dip]]++;
@@ -2373,13 +2476,13 @@ void MakeParticle(void)
 	local_nvoid_Ndip=local_Ndip-mat_count[Nmat];
 	SetupLocalD();
 	MyInnerProduct(mat_count,sizet_type,Nmat+1,NULL);
-	nvoid_Ndip=Ndip-mat_count[Nmat];
+	nvoid_Ndip=(size_t)Ndip-mat_count[Nmat];
 #endif // !SPARSE
-	if (nvoid_Ndip==0) LogError(ONE_POS,"All dipoles of the scatterer are void");
+	if (nvoid_Ndip==0) LogError(ONE_POS,"All voxels of the scatterer are void");
 	local_nRows=3*local_nvoid_Ndip;
 	// initialize dpl and gridspace
 	volcor_used=(volcor && (volume_ratio!=UNDEF));
-	double dipVR=drelX*drelY*drelZ; // ratio of dipole volume to enclosing cube
+	double dipVR=drelX*drelY*drelZ; // ratio of voxel volume to enclosing cube
 	if (sizeX==UNDEF) {
 		if (a_eq!=UNDEF) dpl=lambda*pow(dipVR*nvoid_Ndip*THREE_OVER_FOUR_PI,ONE_THIRD)/a_eq;
 		else if (dpl==UNDEF) dpl=dpl_def; // default value of dpl
@@ -2396,7 +2499,7 @@ void MakeParticle(void)
 	if ((IntRelation==G_FCD || PolRelation==POL_FCD) && dpl<=2)
 		LogError(ONE_POS,"Too small dpl for FCD formulation, should be at least 2");
 	// initialize gridspace, dipvol, and kd*
-	double dsMax=lambda/dpl; // maximum dipole size
+	double dsMax=lambda/dpl; // maximum dipole (voxel) size
 	dsX=dsMax*drelX;
 	dsY=dsMax*drelY;
 	dsZ=dsMax*drelZ;
@@ -2416,13 +2519,6 @@ void MakeParticle(void)
 		gridspace=dsX;
 		kd=TWO_PI/dpl;
 	}
-	// initialize equivalent size parameter and cross section
-	/* from this moment on a_eq and all derived quantities are based on the real a_eq, which can in several cases be
-	 * slightly different from the one given by '-eq_rad' option.
-	 */
-//	a_eq = pow(THREE_OVER_FOUR_PI*nvoid_Ndip*dipVR,ONE_THIRD)*dsMax;
-//	ka_eq = WaveNum*a_eq;
-//	inv_G = 1/(PI*a_eq*a_eq);
 	
 #ifndef SPARSE
 	// granulate one domain, if needed
@@ -2430,7 +2526,7 @@ void MakeParticle(void)
 		tgran=GET_TIME();
 		Timing_GranulComm=0;
 		// calculate number of granules
-		if (mat_count[gr_mat]==0) LogError(ONE_POS,"Domain to be granulated does not contain any dipoles");
+		if (mat_count[gr_mat]==0) LogError(ONE_POS,"Domain to be granulated does not contain any voxels");
 		tmp1=gridspace/gr_d;
 		tmp2=mat_count[gr_mat]*gr_vf*SIX_OVER_PI;
 		tmp3=tmp2*tmp1*tmp1*tmp1;
@@ -2464,8 +2560,6 @@ void MakeParticle(void)
 	// copy nontrivial part of arrays and compute (effective) refractive index
 	index=0;
 	nvol=0;
-	FILE *values = fopen("vf.txt", "w+");
-	if(print_wd) fprintf(values,"Volume fractions correspond to the scatterer\n\n");
 	double N,Ns; //Number of non-void and boundary voxels
 	for (dip=0;dip<local_Ndip;dip++) if (material_tmp[dip]<Nmat) {
 		mat=material[index]=material_tmp[dip];
@@ -2474,57 +2568,60 @@ void MakeParticle(void)
 		memcpy(plSec+3*index,plSec_tmp+3*dip,3*sizeof(double));
 		memcpy(volfrac+index,volfrac_tmp+dip,sizeof(double));
 		// !!! TODO: this is currently incompatible with anisotropy
-				N++;
-				vf=volfrac[index];
-				if(print_wd){
-					double pos[3]={position[3*index],position[3*index+1],position[3*index+2]};
-					fprintf(values,"Voxel index : %d\n", index);
-					fprintf(values,"Center coordinates r = (%.0f,%.0f,%.0f)\n",pos[0],pos[1],pos[2]);
+		N++;
+		vf=volfrac[index];
+		if (vf==0){
+			vf=VolumeFraction(plSec[3*index],plSec[3*index+1],plSec[3*index+2]);
+			volfrac[index]=vf;
+			if(volfrac[index]<1.0 && DotProd(plSec+3*index,DipoleCoord+3*index)<=gridspace) vf=1-vf;
+			Ns++;
+		}
+		nvol+=vf;
+		if(use_ema){
+			if (vf==1) refind[index]=ref_index[mat];
+				else {
+					switch (EffMedium){
+					/*Effective refractive index based on mixing formulae can be further added - see A. García-Valenzuela et al., 
+					"Applicability of the Arago-Biot mixing formula to the effective refractive index of particle suspensions", 
+					Journal of Quantitative Spectroscopy and Radiative Transfer, Volume 351, March 2026*/
+						case EMT_LL:
+							doublecomplex CM=(ref_index[mat]*ref_index[mat]-1)/(ref_index[mat]*ref_index[mat]+2);
+							refind[index]=csqrt((2*vf*CM+1)/(1-vf*CM));
+							break;
+						case EMT_BR:
+							PrintError("Bruggeman formulation is not yet implemented");
+							break;
+					}
 				}
-				if (vf==0){
-					double r[3]={DipoleCoord[3*index],DipoleCoord[3*index+1],DipoleCoord[3*index+2]};
-					double n[3]={plSec[3*index],plSec[3*index+1],plSec[3*index+2]};
-					vf=VolumeFraction(n[0],n[1],n[2]);
-					volfrac[index]=vf;
-					bool cond=(DotProd(n,r)>=0);
-					if(print_wd) fprintf(values,"Vector normal to the plane n = (%.16f,%.16f,%.16f)\n",n[0],n[1],n[2]);
-					if(!cond){
-						vf=1-vf;
-						if(print_wd) fprintf(values,"(p)=vacuum, (s)=scatterer\n");
-					}else if(print_wd) fprintf(values,"(p)=scatterer, (s)=vacuum\n");
-					Ns++;
-				}
-				nvol+=vf;
-			if(print_wd){
-				fprintf(values,"Volume fraction f = %.10f\n", vf);
-				fprintf(values,"\n");
-			}
-			refind[index]=ref_index[mat];
-			// fprintf(values,"Refractive index m = %.5f+%.5fI\n", creal(refind[index]), cimag(refind[index]));
-			index++;
+		}else refind[index]=ref_index[mat];
+		index++;
 	}
-	fclose(values);
+	// initialize equivalent size parameter and cross section
+	/* from this moment on a_eq and all derived quantities are based on the real a_eq, which can in several cases be
+	 * slightly different from the one given by '-eq_rad' option.
+	 */
+	MyInnerProduct(&nvol, double_type, 1, NULL);
+	a_eq = pow(THREE_OVER_FOUR_PI*nvol*dipvol,ONE_THIRD);
+	ka_eq = WaveNum*a_eq;
+	inv_G = 1/(PI*a_eq*a_eq);
+
 	/*Here, some error analysis is performed where the average volume fraction error <Δf> (or simply volume error ΔV) is 
 	determined. The sign of the error Δf=<f0>-<f>=<f0>-fvol is based on the sphere for which there is an overestimation 
-	of the volume fraction since the sphere is a convex shape. These values can be accessed in the logfile.*/
-	fprintf(logfile,"\n===============================================================================================\n");
-	fprintf(logfile," Error estimate of the scatterer volume");
-	fprintf(logfile,"\n===============================================================================================\n");
-	fprintf(logfile,"Total number of voxels N=%.0f\n",Ndip);
-	fprintf(logfile,"Number of non-void voxels N'=%.0f\n",N);
-	fprintf(logfile,"Number of boundary voxels Ns=%.0f\n",Ns);
-	fprintf(logfile,"Proportion of boundary voxels Ns/N'=%.10f\n",Ns/N);
-	fprintf(logfile,"Sum of volume fractions Σf=%.10f\n",nvol);
-	fprintf(logfile,"Average volume fraction <f>=%.10f\n",nvol/Ndip);
-	fprintf(logfile,"Volume fraction error <Δf>=%.10f",nvol/Ndip-volume_ratio);
-	fprintf(logfile,"\n===============================================================================================\n");
-
-	/* from this moment on a_eq and all derived quantities are based on the real a_eq, which can
-		 * in several cases be slightly different from the one given by '-eq_rad' option.
-		 */
-		a_eq = pow(THREE_OVER_FOUR_PI*nvol,ONE_THIRD)*gridspace;
-		ka_eq = WaveNum*a_eq;
-		inv_G = 1/(PI*a_eq*a_eq);
+	of the volume fraction since the sphere is a convex shape. All these values are stored in the logfile.*/
+	#ifdef PARALLEL
+	int rank;
+	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+	if(rank==0){
+	#endif
+		fprintf(logfile,"Total number of voxels N=%.0f\n",Ndip);
+		fprintf(logfile,"Sum of volume fractions Σf=%.10f\n",nvol);
+		fprintf(logfile,"Average volume fraction <f>=%.10f\n",nvol/Ndip);
+		fprintf(logfile,"Scatterer volume error ΔV/V=%.10f\n",nvol/(Ndip*volume_ratio)-1);
+		fprintf(logfile,"Size parameter error Δx/x=%.10f\n",2*ka_eq/sizeX-1);
+	#ifdef PARALLEL
+	}
+	#endif
+	
 	// free temporary memory
 	Free_general(material_tmp);
 	Free_general(DipoleCoord_tmp);
@@ -2538,33 +2635,33 @@ void MakeParticle(void)
 		Free_general(contSegRoMin);
 		Free_general(contSegRoMax);
 	}
+	else if (shape==SH_ONION || shape==SH_ONION_ELL) Free_general(onion_r2);
 #else
 	position=position_full + 3*local_nvoid_d0;
 #endif // SPARSE
-/*	// initialize DipoleCoord
-*	MALLOC_VECTOR(DipoleCoord,double,local_nRows,ALL);
-*	memory+=3*sizeof(double)*local_nvoid_Ndip;
-*	double minZco=0; // minimum Z coordinates of dipoles
-*	for (index=0; index<local_nvoid_Ndip; index++) {
-*		i3=3*index;
-*		DipoleCoord[i3] = (position[i3]-cX)*dsX;
-*		DipoleCoord[i3+1] = (position[i3+1]-cY)*dsY;
-*		DipoleCoord[i3+2] = (position[i3+2]-cZ)*dsZ;
-*		if (minZco>DipoleCoord[i3+2]) minZco=DipoleCoord[i3+2]; // crude way to find the minimum on the way
-*	}
-*/
-	/* test that particle is wholly above the substrate; strictly speaking, we test dipole centers to be above the
+	// initialize DipoleCoord
+	MALLOC_VECTOR(DipoleCoord,double,local_nRows,ALL);
+	memory+=3*sizeof(double)*local_nvoid_Ndip;
+	double minZco=0; // minimum Z coordinates of voxel center
+	for (index=0; index<local_nvoid_Ndip; index++) {
+		i3=3*index;
+		DipoleCoord[i3] = (position[i3]-cX)*dsX;
+		DipoleCoord[i3+1] = (position[i3+1]-cY)*dsY;
+		DipoleCoord[i3+2] = (position[i3+2]-cZ)*dsZ;
+		if (minZco>DipoleCoord[i3+2]) minZco=DipoleCoord[i3+2]; // crude way to find the minimum on the way
+	}
+	/* test that particle is wholly above the substrate; strictly speaking, we test voxel centers to be above the
 	 * substrate - hsub+minZco>0, while the geometric boundary of the particle may still intersect with the substrate.
 	 * However, the current test is sufficient to ensure that corresponding routines to calculate reflected Green's
-	 * tensor do not fail. And accuracy of the DDA itself is anyway questionable when some of the dipoles are very close
-	 * to the substrate (whether they cross it or not).
+	 * tensor do not fail (but see also below). And accuracy of DDA itself is anyway questionable when some of the
+	 * voxels are very close to the substrate (whether they cross it or not).
 	 */
-	//if (surface && hsub<=-minZco) LogError(ALL_POS,"The particle must be entirely above the substrate. There exist a "
-//		"dipole with z="GFORMDEF" (relative to the center), making specified height of the center ("GFORMDEF") too "
-//		"small",minZco,hsub);
+	if (surface && hsub<=-minZco) LogError(ALL_POS,"The particle must be entirely above the substrate. There exist a "
+		"voxel with z="GFORMDEF" (relative to the center), making specified height of the center ("GFORMDEF") too "
+		"small",minZco,hsub);
 	// save geometry
 	if (save_geom)
-#ifndef SPARSE 
+#ifndef SPARSE
 		SaveGeometry();
 #else
 		LogError(ONE_POS,"Saving the geometry is not supported in sparse mode");
@@ -2594,6 +2691,13 @@ void MakeParticle(void)
 	AllGather(NULL,position_full,int3_type,NULL);
 #	endif
 #endif // SPARSE
-	
+	/* The following will become redundant (never occur, unless grid is overridden) when issue 129 is fixed. Currently,
+	 * it is relevant even for sparse mode, since the Sommerfeld integrals are calculated on a grid even for that case.
+	 */
+	if (surface && ZsumShift<=0) LogError(ALL_POS,"The particle must be entirely above the substrate. While all real "
+		"voxels are above, there are layers in the grid, which centers are below the substrate. This can be either "
+		"due to narrow features in the particle shapes, missed by discretization, or due to manually extended grid "
+		"dimension along the z-axis.");
+
 	Timing_Particle += GET_TIME() - tstart;
 }

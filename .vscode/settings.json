@@ -1,0 +1,25 @@
+{
+    "editor.rulers": [120],
+    "cSpell.dictionaries": ["custom"],
+    "cSpell.dictionaryDefinitions": [
+                {
+                    "name": "custom",
+                    "path": "${workspaceFolder}/userdic.txt"
+                }
+            ],
+    "cSpell.diagnosticLevel": "Hint",
+    "cSpell.ignorePaths": [
+        ".vscode/*.json"
+    ],
+    "C_Cpp.default.cStandard": "c99",
+    "files.associations": {
+        "suite_ema": "shellscript",
+        "suite_wd": "shellscript",
+        "stdlib.h": "c",
+        "random": "c",
+        "string.h": "c",
+        "chrono": "c",
+        "xmmintrin.h": "c",
+        "typeinfo": "c"
+    }
+}

@@ -134,7 +134,7 @@ void CatNFiles(const char * restrict dir,const char * restrict tmpl,const char *
 		SnprintfShiftErr(ONE_POS,shift,fname_in,MAX_TMP_FNAME,tmpl,i);
 		in=FOpenErr(fname_in,"r",ONE_POS);
 		// copy file in to out
-		while((c=getc(in))!=EOF) putc(c,out);
+		while ((c=getc(in))!=EOF) putc(c,out);
 		// close and remove tmp file
 		FCloseErr(in,fname_in,ONE_POS);
 		RemoveErr(fname_in,ONE_POS);
@@ -528,7 +528,7 @@ void ParSetup(void)
 	local_x1=gridX;
 #	endif
 	if (local_z1_coer<=local_z0) {
-		LogWarning(EC_INFO,ALL_POS,"No real dipoles are assigned");
+		LogWarning(EC_INFO,ALL_POS,"No real voxels are assigned");
 		local_z1_coer=local_z0;
 	}
 	local_Nz=local_z1-local_z0;
@@ -600,14 +600,14 @@ void ReadField(const char * restrict fname,doublecomplex *restrict field)
 	size_t line=SkipNLines(file,1);
 	line+=SkipComments(file);
 	i=j=0;
-	while(FGetsError(file,fname,&line,linebuf,BUF_LINE,ONE_POS)!=NULL) {
+	while (FGetsError(file,fname,&line,linebuf,BUF_LINE,ONE_POS)!=NULL) {
 		// scan numbers in a line
 		if (i<local_nvoid_d0) { // just count non-blank lines
 			if (sscanf(linebuf,test_form)!=EOF) i++;
 		}
 		else if (i==nvoid_Ndip) { // tests that file doesn't contains extra data rows
 			if (sscanf(linebuf,test_form)!=EOF) LogError(ALL_POS,"Field file %s contains more data rows than number of "
-				"dipoles (%zu) in the particle",fname,nvoid_Ndip);
+				"voxels (%zu) in the particle",fname,nvoid_Ndip);
 		}
 		else { // here local_nvoid_d0 <= i < local_nvoid_d1
 			scanned=sscanf(linebuf,format,buf,buf+1,buf+2,buf+3,buf+4,buf+5);

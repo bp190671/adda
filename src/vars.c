@@ -21,9 +21,9 @@
 int boxX,boxY,boxZ;       // sizes of box enclosing the particle
 size_t boxXY;             // boxX*boxY, used for indexing
 double gridspace;         // =dsX - DEPRECATED, may only be used in parts incompatible with rectDip
-double dsX,dsY,dsZ;       // dipole sizes along each axis
-double rectScaleX,rectScaleY,rectScaleZ; // relative dipole sizes (scales), in many cases are round numbers
-double dipvol;            // dipole volume
+double dsX,dsY,dsZ;       // dipole (voxel) sizes along each axis
+double rectScaleX,rectScaleY,rectScaleZ; // relative voxel sizes (scales), in many cases are round numbers
+double dipvol;            // dipole (voxel) volume
 double kd;                // =kdX - DEPRECATED, may only be used in parts incompatible with rectDip
 double kdX,kdY,kdZ;       // kdX=WaveNum*dsX, ...
 double ka_eq;             // volume-equivalent size parameter
@@ -33,6 +33,7 @@ double * restrict DipoleCoord;      // vector to hold the coordinates of the dip
 double *restrict plSec; //vector to hold the coefficients determining the plane
 doublecomplex * restrict refind;    // stores (effective) refractive index of each dipole
 doublecomplex * restrict sqrtCC;   // sqrt of couple constants (for each dipole, used in WD)
+doublecomplex * restrict invchi;   // effective susceptibility (for each dipole, used in WD)
 double memory;            // total memory usage in bytes
 double memPeak;           // peak memory usage in bytes
 enum inter IntRelation;   // type of formula for interaction term
@@ -64,27 +65,30 @@ bool ipr_required;  /* whether inner product in MatVec will be used by iterative
                        initialization, e.g., for OpenCL) */
 double propAlongZ;  // equal 0 for general incidence, and +-1 for incidence along the z-axis (can be used as flag)
 bool rectDip;       // whether using rectangular-cuboid (non-cubical) dipoles
-bool use_wd; //whether using weighted discretization
-bool print_wd; //whether print WD quantities
+bool use_wd;   //whether using weighted discretization
+bool use_ema;  //whether using effective medium approximation
 
 // 3D vectors (in particle reference frame)
-double prop_0[3],prop[3];     // incident direction (in laboratory and particle reference frame)
-double incPolX[3],incPolY[3]; // incident polarizations (in particle RF)
+double prop[3];               // incident direction
+double incPolX[3],incPolY[3]; // incident polarizations
 double beam_center[3];        // coordinates of the beam center
-double box_origin_unif[3];    /* coordinates of the center of the first dipole in the local computational box (after
-                                 uniform distribution of non-void dipoles among all processors) */
+double box_origin_unif[3];    /* coordinates of the center of the first voxel in the local computational box (after
+                                 uniform distribution of non-void voxels among all processors) */
+
+// 3D vectors (in laboratory reference frame)
+double prop_0[3];             // incident direction 
+double beam_center_0[3];      // coordinates of the beam center
 
 // file info
 const char * restrict directory; // directory to save data in
-FILE * restrict voxel_wd;        // file where all WD quantities are stored for each voxel
 FILE * restrict logfile;         // file where all the information about the run is saved
 int term_width;                  // width of the terminal to which ADDA produces output
 
-// refractive index and couple constants
+// refractive index
 int Nmat;  // number of different domains (for each either scalar or tensor refractive index is specified
 int Ncomp; // number of components of each refractive index (1 or 3)
 doublecomplex ref_index[MAX_NMAT];  // a set of refractive indexes
-doublecomplex cc_sqrt[MAX_NMAT][3]; // sqrt of couple constants (per material, used in TD)
+doublecomplex cc_sqrt[MAX_NMAT][3]; // sqrt of couple constants
 doublecomplex chi_inv[MAX_NMAT][3]; // normalized inverse susceptibility: = 1/(V*chi)
 unsigned char * restrict material;  // material: index for cc
 
@@ -92,9 +96,9 @@ unsigned char * restrict material;  // material: index for cc
 enum iter IterMethod; // iterative method to use
 int maxiter;          // maximum number of iterations
 	// the following two can't be declared restrict due to SwapPointers
-doublecomplex *xvec;  // total electric field on the dipoles
-doublecomplex *pvec;  // polarization of dipoles, also an auxiliary vector in iterative solvers
-doublecomplex * restrict Einc;    // incident field on dipoles
+doublecomplex *xvec;  // total electric field at the voxel centers
+doublecomplex *pvec;  // voxel polarizations, also an auxiliary vector in iterative solvers
+doublecomplex * restrict Einc;    // incident field at voxel centers
 
 // scattering at different angles
 int nTheta;                        // number of angles in scattering profile
@@ -107,19 +111,19 @@ doublecomplex * restrict EgridX,* restrict EgridY;
 int nprocs;                        // total number of processes
 int ringid;                        // ID of current process
 
-size_t local_Ndip;                 // number of local total dipoles
+size_t local_Ndip;                 // number of local total dipoles (voxels)
 size_t local_nvoid_Ndip;           // number of local and ...
-size_t nvoid_Ndip;                 // ... total non-void dipoles
-size_t local_nvoid_d0,local_nvoid_d1; // starting and ending non-void dipole for current processor
-/* By defining nvoid_Ndip, local_nvoid_d0, and local_nvoid_d1 as size_t we limit the possible number of dipoles in
+size_t nvoid_Ndip;                 // ... total non-void dipoles (voxels)
+size_t local_nvoid_d0,local_nvoid_d1; // starting and ending non-void dipole (voxel) for current processor
+/* By defining nvoid_Ndip, local_nvoid_d0, and local_nvoid_d1 as size_t we limit the possible number of voxels in
  * 32-bit version by 4*10^9. This can be restricting for such huge runs distributed among more than 1000 processors. But
  * we assume that using such a large number of processors implies modern cluster and hence 64-bit compilation of ADDA.
  * Anyway, a direct test for Ndip larger than the limit is made and a meaningful error message is produced if needed.
  *
- * The same limitation is implied in a few other places (like number of lines in dipole file, etc.). Definitions of
- * mat_count[] and Ndip are made as size_t due to the same reasoning.
+ * The same limitation is implied in a few other places (like number of lines in shape file, etc.). Definitions of
+ * mat_count[] is made as size_t due to the same reasoning.
  */
-size_t local_nRows;                 // number of local rows of decomposition (only real dipoles)
+size_t local_nRows;                 // number of local rows of decomposition (only real voxels)
 
 // timing
 TIME_TYPE Timing_EField,      // time for calculating scattered fields
@@ -135,17 +139,13 @@ doublecomplex msub;     // complex refractive index of the substrate
 double inc_scale;       // scale to account for irradiance of the incident beam - 1/Re(msub)
 bool msubInf;           // whether msub is infinite (perfectly reflecting surface)
 double hsub;            // height of particle center above surface
-/* Propagation (phase) directions of secondary incident beams above (A) and below (B) the surface (unit vectors)
- * When msub is complex, one of this doesn't tell the complete story, since the corresponding wave is inhomogeneous,
- * given by the complex wavenumber ktVec
- */
-double prIncRefl[3],prIncTran[3];
+
+double * restrict volfrac; //volume fraction of a voxel (accessed in sparse mode)
 
 #ifndef SPARSE // These variables are exclusive to the FFT mode
 
-// position of the dipoles; in the very end of make_particle() z-components are adjusted to be relative to the local_z0
+// position of the voxels; in the very end of make_particle() z-components are adjusted to be relative to the local_z0
 unsigned short * restrict position;
-double * restrict volfrac;
 // auxiliary grids and their partition over processors
 size_t gridX,gridY,gridZ; /* sizes of the 'matrix' X, size_t - to remove type conversions we assume that 'int' is enough
                              for it, but this declaration is to avoid type casting in calculations */
@@ -156,7 +156,7 @@ size_t local_Nsmall;      // number of  points of expanded grid per one processo
 int local_z0,local_z1;    // starting and ending z for current processor
 size_t local_Nz;          // number of z layers (based on the division of smallZ)
 int local_Nz_unif;        /* number of z layers (distance between max and min values), belonging to this processor,
-                             after all non_void dipoles are uniformly distributed between all processors */
+                             after all non_void voxels are uniformly distributed between all processors */
 int local_z1_coer;        // ending z, coerced to be not greater than boxZ (and not smaller than local_z0)
 	// starting, ending x for current processor and number of x layers (based on the division of smallX)
 size_t local_x0,local_x1,local_Nx;

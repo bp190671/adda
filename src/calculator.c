@@ -26,9 +26,9 @@
 #include "oclcore.h"
 #include "Romberg.h"
 #include "timing.h"
-#include "volfrac.h"
+#include "matr_sqrt.h"
+#include "WD.h"
 #include "vars.h"
-#include "tagaki_factor.h"
 // system headers
 #include <math.h>
 #include <stdlib.h>
@@ -40,6 +40,7 @@
 extern const Parms_1D parms[2],parms_alpha;
 extern const angle_set beta_int,gamma_int,theta_int,phi_int;
 // defined and initialized in param.c
+extern const enum matsqrt MatrSqrt; //used to determine matrix square root of polarizability
 extern const bool avg_inc_pol;
 extern const double polNlocRp;
 extern const char *alldir_parms,*scat_grid_parms;
@@ -74,7 +75,7 @@ doublecomplex * restrict Avecbuffer; // used to hold the result of matrix-vector
 doublecomplex * restrict vec1,* restrict vec2,* restrict vec3,* restrict vec4;
 // used in matvec.c
 #ifdef SPARSE
-doublecomplex * restrict arg_full; // vector to hold argvec for all dipoles
+doublecomplex * restrict arg_full; // vector to hold argvec for all voxels
 #endif
 
 // LOCAL VARIABLES
@@ -352,15 +353,15 @@ static inline double ellTheta(const double a)
 		q=exp(-PI*a2);
 		q2=q*q;
 		q3=q*q2;
-		t=2*q*(1+q3*(1+q2*q3)); // t = 1 - theta_3(0,exp(-pi*a^2)) = 2*(q + q^4 + q^9)
-		res=a3*t*(3+t*(3+t)); // a^3*(t^3-1)
+		t=2*q*(1+q3*(1+q2*q3)); // t = theta_3(0,exp(-pi*a^2)) - 1 = 2*(q + q^4 + q^9)
+		res=a3*t*(3+t*(3+t)); // a^3*[(t+1)^3-1]
 	}
 	else { // a<1, employ transformation a->1/a
 		q=exp(-PI/a2);
 		q2=q*q;
 		q3=q*q2;
 		t=1+2*q*(1+q3*(1+q2*q3)); // t = theta_3(0,exp(-pi/a^2)) = 1+ 2*(q + q^4 + q^9)
-		res=t*t*t - a3; // a^3*(t^3-1)
+		res=t*t*t - a3; // a^3*[(t/a)^3-1]
 	}
 	return res;
 }
@@ -387,9 +388,9 @@ static inline double MassaIntegral(const double a,const double b,const double c)
 
 //======================================================================================================================
 
-static void CoupleConstant(doublecomplex *mrel,const enum incpol which,doublecomplex res[static 6], int index)
+static void CoupleConstant(doublecomplex *mrel,const enum incpol which,doublecomplex res[static 3])
 /* Input is relative refractive index (mrel) - either one or three components (for anisotropic). incpol is relevant only
- * for LDR without avgpol. res is six values (complex-symmetric polarizability tensor for WD).
+ * for LDR without avgpol. res is three values (diagonal of polarizability tensor).
  *
  * !!! TODO: if this function will be executed many times, it can be optimized by moving time-consuming calculation of
  * certain coefficients to one-call initialization function.
@@ -400,8 +401,6 @@ static void CoupleConstant(doublecomplex *mrel,const enum incpol which,doublecom
  * calculated from one m) or to another one, then a scalar function is used. See comments in the code for more details.
  */
 {
-
-
 	if (rectDip) {
 		int i;
 		double a,b,c;
@@ -415,7 +414,7 @@ static void CoupleConstant(doublecomplex *mrel,const enum incpol which,doublecom
 			       temp_rectScaleZ=rectScaleZ;
 			double tmp=MIN(temp_rectScaleX,rectScaleY);
 			tmp=MIN(tmp,rectScaleZ);
-			if(tmp>0) {
+			if (tmp>0) {
 				temp_rectScaleX/=tmp;
 				temp_rectScaleY/=tmp;
 				temp_rectScaleZ/=tmp;
@@ -476,7 +475,7 @@ static void CoupleConstant(doublecomplex *mrel,const enum incpol which,doublecom
 				//see B.T. Draine 'Propagation of Electromagnetic Waves on a Rectangular Lattice of Polarizable Points'
 				// Eq number noted for some lines of code
 				res[i]=3*(mrel[0]*mrel[0]-1)/(mrel[0]*mrel[0]+2); // CM
-				// Eq.(55), corrected value CM for rectangular dipole
+				// Eq.(55), corrected value CM for rectangular voxel
 				res[i]=res[i]/(1+res[i]*draine_precalc_data_array[draine_precalc_data_index].R0[i]);
 				res[i]*=dipvol/FOUR_PI;
 				if (PolRelation==POL_CLDR) {
@@ -484,13 +483,13 @@ static void CoupleConstant(doublecomplex *mrel,const enum incpol which,doublecom
 					for (l=0; l < 3; l++)
 						draineSum+=prop[l]*prop[l]*draine_precalc_data_array[draine_precalc_data_index].R3[R3_INDEX(i,l)];
 
-					// L is obtaned in Eq.(62)
+					// L is obtained in Eq.(62)
 					L=c1+mrel[0]*mrel[0]*c2*(1-3*prop[i]*prop[i])-mrel[0]*mrel[0]*c3*prop[i]*prop[i]-FOUR_PI*PI*I*nu/3-
 					  draine_precalc_data_array[draine_precalc_data_index].R1-
 					  (mrel[0]*mrel[0]-1)*draine_precalc_data_array[draine_precalc_data_index].R2[i]-
 					  8*mrel[0]*mrel[0]*prop[i]*prop[i]*
 					  draine_precalc_data_array[draine_precalc_data_index].R3[R3_INDEX(i,i)]+4*mrel[0]*mrel[0]*draineSum;
-					// K is obtaned in Eq.(63)
+					// K is obtained in Eq.(63)
 					K=c3+draine_precalc_data_array[draine_precalc_data_index].R1-
 					  4*draine_precalc_data_array[draine_precalc_data_index].R2[i]+
 					  8*draine_precalc_data_array[draine_precalc_data_index].R3[R3_INDEX(i,i)];
@@ -501,38 +500,15 @@ static void CoupleConstant(doublecomplex *mrel,const enum incpol which,doublecom
 #undef R3_INDEX
 			}
 		}
-		if (!orient_avg && IFROOT) PrintBoth(logfile, "CoupleConstant: "CFORM3V"\n", REIM3V(res));
+		if (!(use_wd||use_ema) && !orient_avg && IFROOT) PrintBoth(logfile, "CoupleConstant: "CFORM3V"\n", REIM3V(res));
 	} 
 	else {
-		if (use_wd){
-			// Calculation of the polarizability tensor
-			doublecomplex alpha[3][3];
-			doublecomplex mp,ms;
-			double vf=volfrac[index];
-			double r[3]={DipoleCoord[3*index],DipoleCoord[3*index+1],DipoleCoord[3*index+2]};
-			double n[3]={plSec[3*index],plSec[3*index+1],plSec[3*index+2]};
-			/*Domain assignment for scatterer : volume fraction, refractive indices*/
-			bool cond=(volfrac[index]<1.0 && DotProd(n,r)<0); // Condition to fulfill for s=scatterer
-			if(cond){
-				mp=1.0+0.0*I;
-				ms=ref_index[0];
-			}else{
-				mp=ref_index[0];
-				ms=1.0+0.0*I;
-			}
-			PolarizabilityCalc(mp,ms,vf,n,alpha);
-			/*Symmetrization through upper/lower triangular matrix components*/
-			res[0]=alpha[0][0]; res[1]=(alpha[0][1]+alpha[1][0])/2.0; res[2]=(alpha[2][0]+alpha[0][2])/2.0;
-			res[3]=alpha[1][1]; res[4]=(alpha[1][2]+alpha[2][1])/2.0; res[5]=alpha[2][2];
-		}
-		else{
 		double ka,kd2,S;
 		int i;
 		bool asym; // whether polarizability is asymmetric (for isotropic m)
 		const double *incPol;
-		bool pol_avg=true; // temporary fixed value for SO polarizability
 
-		asym = (PolRelation==POL_CLDR || PolRelation==POL_SO); // whether non-scalar tensor is produced for scalar m
+		asym = (PolRelation==POL_CLDR); // whether non-scalar tensor is produced for scalar m
 		// !!! this should never happen
 		if (asym && anisotropy) LogError(ONE_POS,"Incompatibility error in CoupleConstant");
 
@@ -540,7 +516,6 @@ static void CoupleConstant(doublecomplex *mrel,const enum incpol which,doublecom
 		if (asym) for (i=0;i<3;i++) { // loop over components of polarizability (for scalar input m)
 			switch (PolRelation) {
 				case POL_CLDR: res[i]=pol3coef(LDR_B1,LDR_B2,LDR_B3,prop[i]*prop[i],mrel[0]); break;
-				case POL_SO: res[i]=pol3coef(SO_B1,SO_B2,SO_B3,(pol_avg ? ONE_THIRD : prop[i]*prop[i]),mrel[0]); break;
 				default: LogError(ONE_POS,"Incompatibility error in CoupleConstant");
 					// no break
 			}
@@ -553,7 +528,7 @@ static void CoupleConstant(doublecomplex *mrel,const enum incpol which,doublecom
 					res[i]=polMplusRR(2*ONE_THIRD*kd2*(2+kd*INV_PI*log((PI-kd)/(PI+kd))),mrel[i]);
 					break;
 				case POL_IGT_SO: res[i]=polMplusRR(SO_B1*kd2,mrel[i]); break;
-				case POL_LAK: // M=(8pi/3)[(1-ika)exp(ika)-1], a - radius of volume-equivalent (to cubical dipole) sphere
+				case POL_LAK: // M=(8pi/3)[(1-ika)exp(ika)-1], a - radius of volume-equivalent (to a cube) sphere
 					ka=LAK_C*kd;
 					res[i]=polM(2*FOUR_PI_OVER_THREE*((1-I*ka)*imExp(ka)-1),mrel[i]);
 					break;
@@ -569,8 +544,8 @@ static void CoupleConstant(doublecomplex *mrel,const enum incpol which,doublecom
 				case POL_NLOC: // !!! additionally dynamic part should be added (if needed)
 					/* Here the polarizability is derived from the condition that V_d*sum(G_h(ri))=-4pi/3, where sum is
 					 * taken over the whole lattice. Then M=4pi/3+V_d*Gh(0)=V_d*sum(G_h(ri),i!=0)
-					 * Moreover, the regular part (in limit Rp->0) of Green's tensor automatically sums to zero, so only the
-					 * irregular part need to be considered -h(r)*4pi/3, where h(r) is a normalized Gaussian
+					 * Moreover, the regular part (in limit Rp->0) of Green's tensor automatically sums to zero, so only
+					 * the irregular part need to be considered -h(r)*4pi/3, where h(r) is a normalized Gaussian
 					 */
 					if (polNlocRp==0) res[i]=polCM(mrel[i]);
 					else res[i]=polM(FOUR_PI_OVER_THREE*ellTheta(SQRT1_2PI*gridspace/polNlocRp),mrel[i]);
@@ -599,132 +574,98 @@ static void CoupleConstant(doublecomplex *mrel,const enum incpol which,doublecom
 			}
 		}
 		if (asym || anisotropy) {
-		//	if (!orient_avg && IFROOT) PrintBoth(logfile, "CoupleConstant: "CFORM3V"\n",REIM3V(res));
+			if (!(use_wd||use_ema) && !orient_avg && IFROOT) PrintBoth(logfile, "CoupleConstant: "CFORM3V"\n",REIM3V(res));
 		}
 		else {
 			res[2]=res[1]=res[0];
-			//if (!orient_avg && IFROOT) PrintBoth(logfile,"CoupleConstant: "CFORM"\n",REIM(res[0]));
+			if (!(use_wd||use_ema) && !orient_avg && IFROOT) PrintBoth(logfile,"CoupleConstant: "CFORM"\n",REIM(res[0]));
 		}
-	}
 	}
 }
 
 //======================================================================================================================
 
 static void InitCC(const enum incpol which)
-// calculate cc, sqrtCC, and chi_inv
+/*Square root of polarizability tensor is here determined. For TD, it is determined per material while for WD/EMA, a
+voxelwise assignation is made. When the voxel is partially filled (f<1), the effective polarizability is a full tensor
+(required complex-symmetric for iterative solvers) so that principal square root is determined with the use of either 
+singular values decomposition or eigenvalues decomposition*/
 {
 	TIME_TYPE tstart;
 	tstart=GET_TIME();
-	double vf;
-	/*For WD, Takagi factorization is now used to compute matrix square roots. Both Takagi UDU' and 
-	Cholesky β'β decompositions are compared to the polarizability tensor.*/
-		if(use_wd){
-			doublecomplex cc[6]; // couple constant
-			size_t dip;
-			FILE* pol = fopen("polarizability.txt","wt");
-			if(print_wd){
-				fprintf(pol, "Polarizability tensors are already symmetrized\n");
-				fprintf(pol, "Volume fractions correspond to the scatterer\n\n");
+	int i,j;
+	if(!use_wd && !use_ema){ //This is just traditional discretization (TD)
+		doublecomplex m;
+		for(i=0;i<Nmat;i++) {
+			CoupleConstant(ref_index+Ncomp*i,which,cc[i]);
+			for(j=0;j<3;j++) cc_sqrt[i][j]=csqrt(cc[i][j]);
+			// chi_inv=1/(V*chi)=4*PI/(V(m^2-1)); for anisotropic - by components
+			for (j=0;j<Ncomp;j++) {
+				m=ref_index[Ncomp*i+j];
+				chi_inv[i][j]=FOUR_PI/(dipvol*(m*m-1));
 			}
-			voxel_wd=fopen("WD.txt","wt");
-			for (dip=0;dip<local_nvoid_Ndip;dip++){
-				fprintf(voxel_wd, "Voxel n°%zu\n\n",dip);
-				CoupleConstant(refind+dip,which,cc,dip);
-				/*Effective polarizability for DRAINE formulation of absorption cross-section*/
-				doublecomplex alpha[3][3],beta[3][3],tmp[3][3];
-				/*Upper/lower triangular assignment for symmetric tensors*/
-				alpha[0][0]=cc[0]; alpha[0][1]=alpha[1][0]=cc[1]; alpha[0][2]=alpha[2][0]=cc[2];
-				alpha[1][1]=cc[3]; alpha[1][2]=alpha[2][1]=cc[4]; alpha[2][2]=cc[5];
-				if(print_wd){
-					if(DotProd(plSec+3*dip,DipoleCoord+3*dip)<0) vf=1-volfrac[dip];
-					else vf=volfrac[dip];
-					if(volfrac[dip]==1) fprintf(pol,"Voxel %d, f=%.6f\n",dip,volfrac[dip]); 
-					else fprintf(pol,"Voxel %d, n=(%.6f,%.6f,%.6f), f=%.6f\n",dip,plSec[3*dip],plSec[3*dip+1],plSec[3*dip+2],vf);
-					fprintf(pol,"Polarizability tensor α =\n");
-					DebugMatr(3,pol,alpha);
-				}
-				if (volfrac[dip]<1.0){
-					bool takagi=false; //whether Takagi decomposition is used (for test purposes)
-					if(takagi){
-						/*Takagi decomposition of α for complex symmetric matrices (U<->U' <=> U'DU<->UDU')*/
-						doublecomplex betaT[3][3],diag[3][3],unit[3][3],unitT[3][3],temp[3][3];
+			// copy first component of chi_inv[i] into other two, if they are not calculated explicitly
+			if (!anisotropy) chi_inv[i][2]=chi_inv[i][1]=chi_inv[i][0];
+		}
+	}else{
+		size_t dip;
+		doublecomplex cc[3],CC[6];
+		for (dip=0;dip<local_nvoid_Ndip;dip++){
+			doublecomplex chi[3][3],alpha[3][3],beta[3][3],tmp[3][3];
+			if(use_wd){
+				CoupleConstantWD(refind+dip,which,chi,CC,dip);
+				alpha[0][0]=CC[0]; alpha[0][1]=alpha[1][0]=CC[1]; alpha[0][2]=alpha[2][0]=CC[2];
+				alpha[1][1]=CC[3]; alpha[1][2]=alpha[2][1]=CC[4]; alpha[2][2]=CC[5];
+			}else if(use_ema){
+				CoupleConstant(refind+dip,which,cc);
+				for (int i=0; i<3; i++) for(int j=0; j<3; j++) alpha[i][j]=(i==j)?cc[i]:0.0+0.0*I;
+			}
+			if (volfrac[dip]<1.0){
+				doublecomplex betaT[3][3],diag[3][3],unit[3][3],unitT[3][3],temp[3][3],lambda[3];
+				switch (MatrSqrt){
+					case SQRT_TAKAGI:
 						double D[3];
-						TakagiFactor(3,alpha,3,D,unit,3,0); //Computes singular values D and unitary U matrix from α
+						TakagiFactor(3,alpha,3,D,unit,3,0);
 						MatrSet(diag, 0);
-						for (int i = 0; i<3; i++) diag[i][i] = D[i]; //<i|D|i>=<d|i>
-						if(print_wd){
-							fprintf(pol, "Diagonal matrix D =\n");
-							DebugMatr(3,pol,diag);
-						}
+						for (int i = 0; i<3; i++) diag[i][i] = D[i];
 						MatrTrans(unitT,unit);
-						if(print_wd){
-							fprintf(pol, "Unitary matrix U =\n");
-							DebugMatr(3,pol,unit);
-						}
 						MatrProd(3,diag,unit,temp);
 						MatrProd(3,unitT,temp,tmp);
-						if(print_wd){
-						fprintf(pol, "Takagi decomposition U'DU =\n");
-						DebugMatr(3,pol,tmp);
-						}
-						/*Cholesky decomposition of α with matrix square root β*/
 						for (int i=0;i<3;i++) for (int j=0;j<3;j++) beta[i][j]=unit[i][j]*sqrt(D[i]);
-						MatrTrans(betaT,beta);
-						MatrProd(3,betaT,beta,tmp);
-					}else{ //Computes the principal square root based on Sylvester's formula
-						doublecomplex lambda[3]; //Eigenvalues λ of the polarizability tensor
+						break;
+					case SQRT_SYLVESTER:
 						MatrEigen(alpha,lambda);
-						if(print_wd){
-							fprintf(pol, "Eigenvalues λ=\n");
-							vDebug(3,pol,lambda);
-						}
 						MatrRoot(alpha, lambda, beta);
-						MatrProd(3,beta,beta,tmp);
-					}
-					for (int i=0;i<3;i++) for (int j=0;j<3;j++) sqrtCC[9*dip+i+3*j]=beta[i][j];
+						break;
+					case SQRT_SCHUR:
+						SchurDecomposition(3, alpha, unit, diag);
+						TriSqrt(diag,tmp);
+						MatrAdj(unitT,unit);
+						MatrProd(3,unit,tmp,temp);
+						MatrProd(3,temp,unitT,beta);
+						break;
 				}
-				/*When vf=1, principal domain fills the whole voxel : TD is retrieved*/
-				else{
-					MatrSet(beta,0);
-					if(anisotropy) for (int j=0;j<3;j++) beta[j][j]=sqrtCC[9*dip+3*j+j]=csqrt(cc[j]);
-					else for (int j=0;j<3;j++) beta[j][j]=sqrtCC[9*dip]=csqrt(cc[0]);
-					MatrProd(3,beta,beta,tmp); //α=ββ
-				}
-				if(print_wd){
-					fprintf(pol, "Matrix square root β =\n");
-					DebugMatr(3,pol,beta);
-					fprintf(pol, "Cholesky decomposition β'β =\n");
-					DebugMatr(3,pol,tmp);
-					fprintf(pol, "\n");
-				}
-
-				/*Effective susceptibility used in FINDIP formulation of absorption cross-section (to be added)*/
-				//TODO : effective susceptibility as argument of PolarizabilityCalc to use it thereafter
+				for (int i=0;i<3;i++) for (int j=0;j<3;j++) sqrtCC[9*dip+i+3*j]=beta[i][j];
+			}else{
+					if(use_wd) sqrtCC[9*dip]=csqrt(CC[0]);
+					else if(use_ema) sqrtCC[9*dip]=csqrt(cc[0]);
+					for (int i=0;i<3;i++) for (int j=0;j<3;j++) beta[i][j]=(i==j)?sqrtCC[9*dip]:0.0+0.0*I;
 			}
-			fclose(voxel_wd);
-			fclose(pol);
-		}else{
-			int i,j;
-			doublecomplex m;
-			for(i=0;i<Nmat;i++) {
-				CoupleConstant(ref_index+Ncomp*i,which,cc[i],NULL);
-				for(j=0;j<3;j++) cc_sqrt[i][j]=csqrt(cc[i][j]);
-				// chi_inv=1/(V*chi)=4*PI/(V(m^2-1)); for anisotropic - by components
-				for (j=0;j<Ncomp;j++) {
-					m=ref_index[Ncomp*i+j];
-					chi_inv[i][j]=FOUR_PI/(dipvol*(m*m-1));
-				}
-				// copy first component of chi_inv[i] into other two, if they are not calculated explicitly
-				if (!anisotropy) chi_inv[i][2]=chi_inv[i][1]=chi_inv[i][0];
-			}
+				if(use_ema) for(i=0;i<3;i++) for(j=0;j<3;j++) chi[i][j]=(refind[dip]*refind[dip]-1)/FOUR_PI*Eye3[i][j];
+				MatrSet(tmp,0);
+				MatrInv(chi,tmp);
+				MatrMul(tmp,1/dipvol);
+				for (i=0;i<3;i++) for (j=0;j<3;j++) invchi[9*dip+i+3*j]=tmp[i][j];
 		}
+	}
 	Timing_CC = GET_TIME() - tstart;
 #ifdef OPENCL
 	/* this is done here, since InitCC can be run between different runs of the iterative solver; write is blocking to
 	 * ensure completion before function end
 	 */
-	CL_CH_ERR(clEnqueueWriteBuffer(command_queue,bufsqrtCC,CL_TRUE,0,sizeof(sqrtCC),sqrtCC,0,NULL,NULL));
+CL_CH_ERR(clEnqueueWriteBuffer(command_queue,bufvolfrac,CL_TRUE,0,local_nvoid_Ndip*sizeof(double),volfrac,0,NULL,NULL));
+CL_CH_ERR(clEnqueueWriteBuffer(command_queue,bufsqrtCC,CL_TRUE,0,local_nvoid_Ndip*9*sizeof(doublecomplex),sqrtCC,0,NULL,NULL));
+CL_CH_ERR(clEnqueueWriteBuffer(command_queue,bufcc_sqrt,CL_TRUE,0,sizeof(cc_sqrt),cc_sqrt,0,NULL,NULL));
 #endif
 }
 
@@ -756,7 +697,7 @@ static void calculate_one_orientation(double * restrict res)
 		 * Y direction. In case of rotational symmetry this is not needed but requires lots more programming so we leave
 		 * this optimization to a later time.
 		 */
-		if(CalculateE(INCPOL_Y,CE_NORMAL)==CHP_EXIT) return;
+		if (CalculateE(INCPOL_Y,CE_NORMAL)==CHP_EXIT) return;
 
 		if (IFROOT) {
 			PRINTFB("\nhere we go, calc X\n\n");
@@ -767,7 +708,7 @@ static void calculate_one_orientation(double * restrict res)
 		 * If new formulation depends on the incident polarization (unlikely) update the test above.
 		 */
 
-		if(CalculateE(INCPOL_X,CE_NORMAL)==CHP_EXIT) return;
+		if (CalculateE(INCPOL_X,CE_NORMAL)==CHP_EXIT) return;
 	}
 	D("CalculateE finished");
 	MuellerMatrix();
@@ -814,7 +755,10 @@ static void AllocateEverything(void)
 	 * vector, will surely cause segmentation fault afterwards. So we do not implement these extra tests for now.
 	 */
 	// allocate all the memory
-	if (!prognosis) MALLOC_VECTOR(sqrtCC,complex,local_nvoid_Ndip*9,ALL);
+	if (!prognosis){
+		MALLOC_VECTOR(sqrtCC,complex,local_nvoid_Ndip*9,ALL);
+		MALLOC_VECTOR(invchi,complex,local_nvoid_Ndip*9,ALL);
+	}
 		memory+=sizeof(doublecomplex)*(double)local_nvoid_Ndip;
 	tmp=sizeof(doublecomplex)*(double)local_nRows;
 	if (!prognosis) { // main 5 vectors, some of them are used in the iterative solver
@@ -960,8 +904,12 @@ static void AllocateEverything(void)
 	 *          more exactly: gridX*gridY*gridZ*(36+48nprocs/boxX [+24/nprocs]) value in [] is only for parallel mode.
 	 * For surf additionally: gridX*gridY*gridZ*(48+48nprocs/boxX)
 	 * 			+ for Sommerfeld table: 128*boxZ*(boxX*boxY-(MIN(boxX,boxY))^2/2)
-	 *    For OpenCL mode all MatVec part is allocated on GPU instead of main (CPU) memory (+ a few additional vectors).
-	 *    However, OpenCL may additionally use up to 96*min(32,gridX)*gridY*gridZ if available.
+	 *    For OpenCL mode all MatVec part is allocated on GPU instead of main (CPU) memory (+ a few additional vectors)
+	 *    However, the CPU memory is not decreased accordingly. Due to FFT calculation of the Dmatrix on the CPU, the
+	 *    peak memory is the larger of the "others" below or (224+128/boxX)*Ndip + (31[+8])*nvoid_Ndip, where +8 is for
+	 *    two iterative solvers below.
+	 *    OpenCL+surf will require CPU memory of (224+128/boxX)*Ndip + (31[+8])*nvoid_Ndip + Sommerfeld table (above)
+	 *    Moreover, OpenCL may additionally use up to 96*min(32,gridX)*gridY*gridZ on the GPU if available.
 	 * others - nvoid_Ndip*{271(CGNR,BiCG), 367(CSYM,QMR2), 415(BiCGStab,QMR), or 463(BCGS2)}
 	 *          + additional 8*nvoid_Ndip for OpenCL mode and CGNR or Bi-CGSTAB
 	 * PARALLEL: above is total; division over processors of MatVec is uniform, others - according to local_nvoid_Ndip
@@ -996,6 +944,7 @@ void FreeEverything(void)
 #ifndef SPARSE	
 	Free_FFT_Dmat();
 	Free_cVector(sqrtCC);
+	Free_cVector(invchi);
 	Free_cVector(expsX);
 	Free_cVector(expsY);
 	Free_cVector(expsZ);
@@ -1064,7 +1013,7 @@ void FreeEverything(void)
 			Free_general(muel_phi_buf);
 		}
 	}
-	// these 3 were allocated in MakeParticle
+	// these 4 were allocated in MakeParticle
 	Free_general(DipoleCoord);
 	Free_general(material);
 	Free_cVector(refind);

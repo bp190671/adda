@@ -26,15 +26,15 @@
 //=====================================================================================================================
 
 static inline void CcMul(doublecomplex * restrict argvec_src,doublecomplex * restrict argvec_dest, const size_t j)
-// Takes the j'th block in argvec_src, multiplies by sqrtCC at that position and stores the result in argvec_dest.
+// Takes the j'th block in argvec_src, multiplies by cc_sqrt at that position and stores the result in argvec_dest.
 {
 	const size_t j3=j*3;
 	*(__m128d *)&(argvec_dest[j3]) = cmul(*(__m128d *)&(argvec_src[j3]),
-		*(__m128d *)&(sqrtCC[material[j]][0]));
+		*(__m128d *)&(cc_sqrt[material[j]][0]));
 	*(__m128d *)&(argvec_dest[j3+1]) = cmul(*(__m128d *)&(argvec_src[j3+1]),
-		*(__m128d *)&(sqrtCC[material[j]][1]));
+		*(__m128d *)&(cc_sqrt[material[j]][1]));
 	*(__m128d *)&(argvec_dest[j3+2]) = cmul(*(__m128d *)&(argvec_src[j3+2]),
-		*(__m128d *)&(sqrtCC[material[j]][2]));
+		*(__m128d *)&(cc_sqrt[material[j]][2]));
 }
 
 //=====================================================================================================================
@@ -56,7 +56,7 @@ static inline void AijProd(doublecomplex * restrict argvec,doublecomplex * restr
 	const __m128d argZ = _mm_load_pd((double *)(argvec+j3+2));
 	STOP_IGNORE;
 
-	if (j!=local_nvoid_d0+i) { // main interaction is not computed for coinciding dipoles
+	if (j!=local_nvoid_d0+i) { // main interaction is not computed for coinciding voxels
 		(*InterTerm_int)(position[i3]-position_full[j3], position[i3+1]-position_full[j3+1],
 			position[i3+2]-position_full[j3+2], iterm);
 		res = cmul(argX, *(__m128d *)&(iterm[0]));
@@ -109,15 +109,15 @@ static inline void AijProd(doublecomplex * restrict argvec,doublecomplex * restr
 //=====================================================================================================================
 
 static inline void DiagProd(doublecomplex * restrict argvec,doublecomplex * restrict resultvec,const size_t i)
-/* Multiplies the result in the i'th block of resultvec by sqrtCC at that block, subtracts the result from the i'th
+/* Multiplies the result in the i'th block of resultvec by cc_sqrt at that block, subtracts the result from the i'th
  * block of argvec, and stores the result in the i'th block if resultvec.
  */
 {
 	const size_t i3 = i*3;
 
-	const __m128d tmp1 = cmul(*(__m128d *)&(resultvec[i3]),*(__m128d *)&(sqrtCC[material[i]][0]));
-	const __m128d tmp2 = cmul(*(__m128d *)&(resultvec[i3+1]),*(__m128d *)&(sqrtCC[material[i]][1]));
-	const __m128d tmp3 = cmul(*(__m128d *)&(resultvec[i3+2]),*(__m128d *)&(sqrtCC[material[i]][2]));
+	const __m128d tmp1 = cmul(*(__m128d *)&(resultvec[i3]),*(__m128d *)&(cc_sqrt[material[i]][0]));
+	const __m128d tmp2 = cmul(*(__m128d *)&(resultvec[i3+1]),*(__m128d *)&(cc_sqrt[material[i]][1]));
+	const __m128d tmp3 = cmul(*(__m128d *)&(resultvec[i3+2]),*(__m128d *)&(cc_sqrt[material[i]][2]));
 
 	*(__m128d *)&(resultvec[i3]) = _mm_sub_pd(*(__m128d *)&(argvec[i3]),tmp1);
 	*(__m128d *)&(resultvec[i3+1]) = _mm_sub_pd(*(__m128d *)&(argvec[i3+1]),tmp2);
@@ -129,7 +129,7 @@ static inline void DiagProd(doublecomplex * restrict argvec,doublecomplex * rest
 //=====================================================================================================================
 
 static inline void CcMul(doublecomplex * restrict argvec_src,doublecomplex * restrict argvec_dest, const size_t j)
-// Takes the j'th block in argvec_src, multiplies by sqrtCC at that position and stores the result in argvec_dest.
+// Takes the j'th block in argvec_src, multiplies by cc_sqrt at that position and stores the result in argvec_dest.
 {
 	const size_t j3 = j*3;
 
@@ -150,7 +150,7 @@ static inline void AijProd(doublecomplex * restrict argvec,doublecomplex * restr
 	doublecomplex iterm[6];
 	const size_t i3=3*i,j3=3*j;
 
-	if (j!=local_nvoid_d0+i) { // main interaction is not computed for coinciding dipoles
+	if (j!=local_nvoid_d0+i) { // main interaction is not computed for coinciding voxels
 		(*InterTerm_int)(position[i3]-position_full[j3],position[i3+1]-position_full[j3+1],
 			position[i3+2]-position_full[j3+2],iterm);
 		cSymMatrVec(iterm,argvec+j3,res);
@@ -167,7 +167,7 @@ static inline void AijProd(doublecomplex * restrict argvec,doublecomplex * restr
 //=====================================================================================================================
 
 static inline void DiagProd(doublecomplex * restrict argvec,doublecomplex * restrict resultvec,const size_t i)
-/* Multiplies the result in the i'th block of resultvec by sqrtCC at that block, subtracts the result from the i'th
+/* Multiplies the result in the i'th block of resultvec by cc_sqrt at that block, subtracts the result from the i'th
  * block of argvec, and stores the result in the i'th block if resultvec.
  */
 {
