@@ -39,7 +39,7 @@ TIME_TYPE Timing_EPlane,Timing_EPlaneComm,    // for Eplane calculation: total a
 size_t TotalEFieldPlane; // total number of planes for scattered field calculations
 // used in calculator.c
 TIME_TYPE Timing_Init, // for total initialization of the program (before CalculateE)
-          Timing_Init_Int; // for initialization of interaction routines (including computing tables)
+          Timing_Init_Int, // for initialization of interaction routines (including computing tables)
 					Timing_CC; //for square root of couple constant calculation
 size_t TotalEval;      // total number of orientation evaluations
 #ifdef OPENCL

@@ -364,7 +364,7 @@ void MatVec (doublecomplex * restrict argvec,    // the argument vector
 		index=IndexXmatrix(position[j],position[j+1],position[j+2]);
 		/*Direct and inverse FFTs have been done as Ymat=F{D}*F{Xmat}->F{Xmat}, Xmat->D.Xmat=D.(S.x) : Ax = x + S.Xmat*/
 		if (use_wd||use_ema){
-			doublecomplex matrix[3][3], matrixT[3][3];
+			doublecomplex matrix[3][3];
 			doublecomplex result[3],vec[3];
 			MatrSet(matrix,0);
 			if(volfrac[i]<1.0) for (int k=0; k<3; k++) for (int l=0; l<3; l++) matrix[k][l]=sqrtCC[9*i+k+3*l];

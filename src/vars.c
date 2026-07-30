@@ -33,7 +33,7 @@ double * restrict DipoleCoord;      // vector to hold the coordinates of the dip
 double *restrict plSec; //vector to hold the coefficients determining the plane
 doublecomplex * restrict refind;    // stores (effective) refractive index of each dipole
 doublecomplex * restrict sqrtCC;   // sqrt of couple constants (for each dipole, used in WD)
-doublecomplex * restrict invchi;   // effective susceptibility (for each dipole, used in WD)
+doublecomplex * restrict invchi;   // inverse susceptibility per unit volume (for each dipole, used in WD)
 double memory;            // total memory usage in bytes
 double memPeak;           // peak memory usage in bytes
 enum inter IntRelation;   // type of formula for interaction term

@@ -25,6 +25,7 @@
 #include "io.h"
 #include "memory.h"
 #include "oclcore.h"
+#include "param.h"
 #include "Romberg.h"
 #include "timing.h"
 #include "vars.h"
@@ -85,7 +86,7 @@ void IntersectionParams(double nv[8], double n[3]) {
 
 //======================================================================================================================
 
-int CubePlaneIntersect(const double n[3], double intersections[24][3], int edgeCounts[6]) {
+int CubePlaneIntersect(double n[3], double intersections[24][3], int edgeCounts[6]) {
 	/*Determines the number of intersections per edge within the cube*/
 	int i_idx = 0;
 	double nv[8];
@@ -112,7 +113,7 @@ int CubePlaneIntersect(const double n[3], double intersections[24][3], int edgeC
 
 //======================================================================================================================
 
-void PointsCenter(const double p[24][3], int n, double c[3]) {
+void PointsCenter(double p[24][3], int n, double c[3]) {
 	/*Computes the centroid from a set of vertices*/
 	vInit(c);
 	for (int i = 0; i < n; i++)
@@ -123,7 +124,7 @@ void PointsCenter(const double p[24][3], int n, double c[3]) {
 
 //======================================================================================================================
 
-double PointWalkOrd(const double u0[3], const double u[3], const double n[3]) {
+double PointWalkOrd(double u0[3], double u[3], const double n[3]) {
 	/*Ordering function Ord() for points around a normal vector : it is based on some reference point*/
 	double vecProd[3];
 
@@ -140,7 +141,7 @@ double PointWalkOrd(const double u0[3], const double u[3], const double n[3]) {
 
 //======================================================================================================================
 
-int ReorderPoints(const double p[24][3], int k, const double n[3], double pReordered[24][3]) {
+int ReorderPoints(double p[24][3], int k, const double n[3], double pReordered[24][3]) {
 	/*Reorders points around their centroid, sorts them based on their values of Ord() and removes duplicate points*/
 	double c[3];
 	for(int l=0;l<3;l++) c[l]=CubeCenter[l];
@@ -282,16 +283,14 @@ for plane coefficients and explicit expressions for the pyramidal decomposition.
 	} // A<1,B<1,C<1,A+B<1,A+C<1,B+C<1,A+B+C<1 : f0=(1-h(A)-h(B)-h(C)+h(A+B)+h(A+C)+h(B+C)-h(A+B+C))/(6abc)
 	if (C==0) return 0.0;
 	double vf=tmp/(3*C); //Here, C=0 is always avoided because of sorting A<=B<=C, leading to A=B=C=0 (no plane)
-	extern const bool curvcor;
 	if(curvcor){
 	/*The following term is a correction to the plane approximation which accounts the curvature effects. These effects
 	cannot be taken into account into scattering quantities since a plane interface is needed to warrant constant fields 
 	in each subvoxel: in this respect, this correction is used only to decrease errors related to the scatterer volume*/
-		extern enum sh shape;
 		double n[3]={a,b,c};
 		double nv[8];
 		double p[6][3];
-		double Rc; //Radius of curvature
+		double K; //Mean curvature
 		IntersectionParams(nv, n);
 		int vN=0;
 		if (EdgeIn(0,1,nv,p[vN]) || EdgeIn(1,4,nv,p[vN]) || EdgeIn(4,7,nv,p[vN])) vN++; // 0->1->4->7
@@ -315,17 +314,26 @@ for plane coefficients and explicit expressions for the pyramidal decomposition.
 			iner+=AbsOutProd(p[i],p[j])*(DotProd(p[i],p[i])+DotProd(p[i],p[j])+DotProd(p[j],p[j]));
 		} // inertia moment is iner/12
 		// this formula is based on expression for height between tangent plane and sphere, as r^2/2*R
-		if(shape==SH_SPHERE){
-			Rc=boxX/2; //radius of curvature is sphere radius
-			vf-=iner/(24*Rc); //Information on the local curvature is needed to extend it to other shapes
+		double R = boxX/2.0;
+		switch (shape){
+			case SH_CYLINDER:
+				if (n[0]!=0 && n[1]!=0 && n[2]==0) K=1/(2*R); //Disk: n=(a,b,0)
+				else if (n[0]==0 && n[1]==0 && n[2]!=0) K= 0.0; //Wall: n=(0,0,c)
+				else K=0.0; //Non-smooth surface here so arbitrary value here
+				break;
+			case SH_SPHERE: 
+				K=1/R;
+				break;
+			default: LogError(ONE_POS,"Unknown shape");
 		}
+		vf-=iner*K/24;
 	}
 	return vf;
 }
 
 //======================================================================================================================
 
-void CalculationOfLsTensor(const double p[24][3], int k, const double n[3], double L[9]) {
+void SelfTermDyadic(double p[24][3], int k, const double n[3], double L[9]) {
 	/*Determines the self-term dyadic of a single facet through the vector function h associated to some contour integral 
 	on a polygon and the solid angle Ω as viewed from the origin.*/
 	if (k<3) return;
@@ -374,20 +382,17 @@ void CalculationOfLsTensor(const double p[24][3], int k, const double n[3], doub
 	}
 }
 //======================================================================================================================
-void FiniteSizeCorrection(doublecomplex m,double vf,doublecomplex M0[9])
+void FiniteSizeCorrection(doublecomplex m,double vf,doublecomplex Mp[9],doublecomplex Ms[9])
 {
 		doublecomplex M[9];
-		double ka,kd2,S;
+		double kd2,S;
 		int i;
 		bool asym;
 		const double *incPol;
-		bool pol_avg=true;
 		const enum incpol which=INCPOL_Y;
 		doublecomplex RR=I*2*kd*kd*kd/3;
-		extern const bool avg_inc_pol;
-		extern const double polNlocRp;
 
-		for (int i=0;i<9;i++) M[i]=0.0+0.0*I;
+		for (i=0;i<9;i++) M[i]=0.0+0.0*I;
 
 		asym = (PolRelation==POL_CLDR);
 		if (asym && anisotropy) LogError(ONE_POS,"Incompatibility error in CoupleConstant");
@@ -444,7 +449,10 @@ void FiniteSizeCorrection(doublecomplex m,double vf,doublecomplex M0[9])
 					// no break
 			}
 		}
-		for (int i=0;i<9;i++) M0[i]=vf*M[i]; //First-order approximation in volume
+		for (i=0;i<9;i++){ //First-order approximation in volume
+			Mp[i]=vf*M[i];
+			Ms[i]=M[i]-Mp[i];
+		}
 }
 //======================================================================================================================
 void PolarizabilityCalc(doublecomplex mp, doublecomplex ms, double vf, double n[3],doublecomplex chi[3][3],doublecomplex alpha[3][3])
@@ -460,9 +468,7 @@ void PolarizabilityCalc(doublecomplex mp, doublecomplex ms, double vf, double n[
 	double Ls[9], LsMatr[3][3]; // Self-term dyadic in secondary domain
 	doublecomplex Mp[9], MpMatr[3][3]; // Finite-size correction in principal domain
 	doublecomplex Ms[9], MsMatr[3][3]; // Finite-size correction in secondary domain
-	doublecomplex alphaT[3][3]; // Transpose of the polarizability tensor
 	doublecomplex tmp[3][3], tempT[3][3], temp[3][3], tempP[3][3], tempS[3][3]; //Some 3x3 temporary matrices
-	double trLp,trLs; //Normalized tr(Ls) and tr(Lp)
 	double UnsortedEdgePoints[6][24][3], SortedEdgePoints[6][24][3];
 	double intersections[24][3], pOrdered[24][3], pOrdered_inv[24][3];
 	int counting = 0, accumCounting = 0, NumberOfPoints[6], edgeIntCounts[6]; // separate counts of intersections (by edges)
@@ -482,7 +488,7 @@ void PolarizabilityCalc(doublecomplex mp, doublecomplex ms, double vf, double n[
 		for (int j=0; j<6; j++){
 			counting=0;
 			for (int i=0; i<4; i++){
-				double* p = cubeOrderedPoints[cubeOrderedEdges[j][i]];
+				const double* p = cubeOrderedPoints[cubeOrderedEdges[j][i]];
 				if (DotProd(p,n)>1.0) vCopy(p, UnsortedEdgePoints[j][counting++]);
 			}
 			for (int l=0; l<edgeIntCounts[j]; l++) vCopy(intersections[accumCounting + l], UnsortedEdgePoints[j][counting + l]);
@@ -496,17 +502,16 @@ void PolarizabilityCalc(doublecomplex mp, doublecomplex ms, double vf, double n[
 		/* Self-term dyadic Ls for each face of the cube...*/
 		for (int l=0; l<9; l++) Ls[l]=0.0;
 		for (int i=0; i<6; i++) 
-			CalculationOfLsTensor(SortedEdgePoints[i], NumberOfPoints[i], CubeEdgeNorm[i], Ls);
+			SelfTermDyadic(SortedEdgePoints[i], NumberOfPoints[i], CubeEdgeNorm[i], Ls);
 		/*...and for the slice generated by the intersecting plane*/
 		vNormalize(n);
 		/*Normal vector of the facet associated to the intersecting plane is always outward to (s) while the computed normal
 		vector of the plane always points toward (s) : the vertices are always CCW ordered here */
 		for (int i=0; i<k; i++) vCopy(pOrdered[i],pOrdered_inv[(k-1)-i]);
-		CalculationOfLsTensor(pOrdered_inv, k, n, Ls);
+		SelfTermDyadic(pOrdered_inv, k, n, Ls);
 		for (int l=0; l<9; l++) Lp[l]=FOUR_PI_OVER_THREE*Eye[l]-Ls[l];
 	}
-	FiniteSizeCorrection(mp,vf,Mp);
-	FiniteSizeCorrection(ms,1-vf,Ms);
+	FiniteSizeCorrection(mp,vf,Mp,Ms);
 	/*Here follows the routine for the calculation of effective polarizability tensor, based on principal domain p. The 
 	domain assignment that is performed in CoupleConstant holds for volume fraction fp and refractive indices mp & ms.*/
 	for (int i=0; i<3; i++){
@@ -541,13 +546,10 @@ void PolarizabilityCalc(doublecomplex mp, doublecomplex ms, double vf, double n[
 	MatrInv(tmp,temp);
 	MatrProd(3, chi, temp, alpha);
 	MatrMul(alpha,dipvol);
-
-	trLs=(LsMatr[0][0]+LsMatr[1][1]+LsMatr[2][2])/(4.0*PI);
-	trLp=(LpMatr[0][0]+LpMatr[1][1]+LpMatr[2][2])/(4.0*PI);
 	
 }
 //======================================================================================================================
-void CoupleConstantWD(doublecomplex *mrel,const enum incpol which,doublecomplex chi[3][3],doublecomplex res[static 6], int index)
+void CoupleConstantWD(doublecomplex *mrel,doublecomplex chi[3][3],doublecomplex res[static 6], int index)
 {
 	doublecomplex alpha[3][3];
 	doublecomplex mp,ms;
@@ -558,9 +560,9 @@ void CoupleConstantWD(doublecomplex *mrel,const enum incpol which,doublecomplex 
 	bool cond=(volfrac[index]<1.0 && DotProd(n,r)<=gridspace); // Condition to fulfill for s=scatterer
 	if(cond){
 		mp=1.0+0.0*I;
-		ms=ref_index[0];
+		ms=mrel[0];
 	}else{
-		mp=ref_index[0];
+		mp=mrel[0];
 		ms=1.0+0.0*I;
 	}
 	PolarizabilityCalc(mp,ms,vf,n,chi,alpha);

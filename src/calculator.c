@@ -609,29 +609,29 @@ singular values decomposition or eigenvalues decomposition*/
 		}
 	}else{
 		size_t dip;
-		doublecomplex cc[3],CC[6];
+		doublecomplex alph[3],CC[6];
 		for (dip=0;dip<local_nvoid_Ndip;dip++){
 			doublecomplex chi[3][3],alpha[3][3],beta[3][3],tmp[3][3];
 			if(use_wd){
-				CoupleConstantWD(refind+dip,which,chi,CC,dip);
+				CoupleConstantWD(refind+dip,chi,CC,dip);
 				alpha[0][0]=CC[0]; alpha[0][1]=alpha[1][0]=CC[1]; alpha[0][2]=alpha[2][0]=CC[2];
 				alpha[1][1]=CC[3]; alpha[1][2]=alpha[2][1]=CC[4]; alpha[2][2]=CC[5];
 			}else if(use_ema){
-				CoupleConstant(refind+dip,which,cc);
-				for (int i=0; i<3; i++) for(int j=0; j<3; j++) alpha[i][j]=(i==j)?cc[i]:0.0+0.0*I;
+				CoupleConstant(refind+dip,which,alph);
+				for (i=0; i<3; i++) for(j=0; j<3; j++) alpha[i][j]=(i==j)?alph[i]:0.0+0.0*I;
 			}
 			if (volfrac[dip]<1.0){
-				doublecomplex betaT[3][3],diag[3][3],unit[3][3],unitT[3][3],temp[3][3],lambda[3];
+				doublecomplex diag[3][3],unit[3][3],unitT[3][3],temp[3][3],lambda[3];
+				double D[3];
 				switch (MatrSqrt){
 					case SQRT_TAKAGI:
-						double D[3];
-						TakagiFactor(3,alpha,3,D,unit,3,0);
+						TakagiFactor(3,alpha[0],3,D,unit[0],3,0);
 						MatrSet(diag, 0);
-						for (int i = 0; i<3; i++) diag[i][i] = D[i];
+						for (i = 0; i<3; i++) diag[i][i] = D[i];
 						MatrTrans(unitT,unit);
 						MatrProd(3,diag,unit,temp);
 						MatrProd(3,unitT,temp,tmp);
-						for (int i=0;i<3;i++) for (int j=0;j<3;j++) beta[i][j]=unit[i][j]*sqrt(D[i]);
+						for (i=0;i<3;i++) for (j=0;j<3;j++) beta[i][j]=unit[i][j]*sqrt(D[i]);
 						break;
 					case SQRT_SYLVESTER:
 						MatrEigen(alpha,lambda);
@@ -645,11 +645,11 @@ singular values decomposition or eigenvalues decomposition*/
 						MatrProd(3,temp,unitT,beta);
 						break;
 				}
-				for (int i=0;i<3;i++) for (int j=0;j<3;j++) sqrtCC[9*dip+i+3*j]=beta[i][j];
+				for (i=0;i<3;i++) for (j=0;j<3;j++) sqrtCC[9*dip+i+3*j]=beta[i][j];
 			}else{
 					if(use_wd) sqrtCC[9*dip]=csqrt(CC[0]);
-					else if(use_ema) sqrtCC[9*dip]=csqrt(cc[0]);
-					for (int i=0;i<3;i++) for (int j=0;j<3;j++) beta[i][j]=(i==j)?sqrtCC[9*dip]:0.0+0.0*I;
+					else if(use_ema) sqrtCC[9*dip]=csqrt(alph[0]);
+					for (i=0;i<3;i++) for (j=0;j<3;j++) beta[i][j]=(i==j)?sqrtCC[9*dip]:0.0+0.0*I;
 			}
 				if(use_ema) for(i=0;i<3;i++) for(j=0;j<3;j++) chi[i][j]=(refind[dip]*refind[dip]-1)/FOUR_PI*Eye3[i][j];
 				MatrSet(tmp,0);

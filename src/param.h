@@ -18,6 +18,7 @@
 // project headers
 #include "function.h" // needed for function attributes
 // system headers
+#include <stdbool.h> // for bool
 #include <limits.h> // for INT_MIN and INT_MAX
 #include <math.h>
 
@@ -27,6 +28,11 @@ typedef struct {
 } opt_index;
 
 extern opt_index opt; // defined in param.c
+/*Defined in param.c and used in WD.c*/
+extern bool curvcor;
+extern enum sh shape;
+extern bool avg_inc_pol;
+extern double polNlocRp;
 
 void PrintErrorHelp(const char * restrict fmt, ... ) ATT_PRINTF(1,2) ATT_NORETURN;
 

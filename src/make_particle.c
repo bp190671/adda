@@ -41,7 +41,7 @@
 
 // defined and initialized in param.c
 extern const enum emt EffMedium;
-extern const enum sh shape;
+// extern const enum sh shape;
 extern const double lambda;
 extern double sizeX,dpl,a_eq;
 extern const int jagged;
@@ -2122,7 +2122,6 @@ void MakeParticle(void)
 	double tmp1,tmp2,tmp3;
 	double a, b, c; //coefficients determining the plane
 	double temp_plane; //used for a, b, c calculation
-	doublecomplex temp1, temp2, temp3;
 	double xr,yr,zr;  // dipole coordinates relative to sizeX. xr is inside (-1/2,1/2), others - based on aspect ratios
 	double xn,yn,zn;
 	double xcoat,ycoat,zcoat,r2,ro2,z2,zshift,xshift;
@@ -2138,7 +2137,7 @@ void MakeParticle(void)
 	double vf;   // volume fraction of a boundary dipole
 	double nvol; // total volume of non-void dipoles (corrected for volume fraction) in dipoles
 	static double * restrict DipoleCoord_tmp,* restrict volfrac_tmp,* restrict plSec_tmp;
-	static unsigned short * restrict position_tmp;
+	// static unsigned short * restrict position_tmp;
 	unsigned short us_tmp;
 	TIME_TYPE tgran;
 #endif // !SPARSE
@@ -2279,7 +2278,7 @@ void MakeParticle(void)
 				if(use_wd||use_ema){
 					tmp1=2*dh*(fabs(xr)+fabs(yr));
 					r2=xr*xr+yr*yr;
-					if(r2+tmp1+2*dh*dh<=0.25&&(fabs(zr)+dh)<=hdratio || xr==0 && yr==0 && zr==0){
+					if(((r2+tmp1+2*dh*dh<=0.25)&&(fabs(zr)+dh<=hdratio)) || (xr==0 && yr==0 && zr==0)){
 						mat=0;
 						vf=1;
 					}
@@ -2377,7 +2376,7 @@ void MakeParticle(void)
 				{
 				tmp1 = 2*dh*(fabs(xr)+fabs(yr)+fabs(zr)); // 2(x0+y0+z0)d/2
 				r2=xr*xr+yr*yr+zr*zr; // |r0|^2=x0^2+y0^2+z0^2
-				if (r2-tmp1+3*dh*dh<0.25 || xr==0 && yr==0 && zr==0) //If the nearest corner is inside the sphere (f>0),...
+				if ((r2-tmp1+3*dh*dh<0.25) || (xr==0 && yr==0 && zr==0)) //If the nearest corner is inside the sphere (f>0),...
 				 {
 					mat=0; //..., then the scatterer material is assigned
 					vf=1;
@@ -2385,7 +2384,7 @@ void MakeParticle(void)
 						{
 							vf=0;
 							//Plane crosses the voxel center (f=1/2)
-							if (abs(r2-0.25)<FLT_EPSILON) r2+=FLT_EPSILON;
+							if (fabs(r2-0.25)<FLT_EPSILON) r2+=FLT_EPSILON;
 								temp_plane = 2*dh/(sqrt(r2*0.25)-r2);
 								a = temp_plane*(xr);
 								b = temp_plane*(yr);
@@ -2580,12 +2579,12 @@ void MakeParticle(void)
 		if(use_ema){
 			if (vf==1) refind[index]=ref_index[mat];
 				else {
+					doublecomplex CM=(ref_index[mat]*ref_index[mat]-1)/(ref_index[mat]*ref_index[mat]+2);
 					switch (EffMedium){
 					/*Effective refractive index based on mixing formulae can be further added - see A. García-Valenzuela et al., 
 					"Applicability of the Arago-Biot mixing formula to the effective refractive index of particle suspensions", 
 					Journal of Quantitative Spectroscopy and Radiative Transfer, Volume 351, March 2026*/
 						case EMT_LL:
-							doublecomplex CM=(ref_index[mat]*ref_index[mat]-1)/(ref_index[mat]*ref_index[mat]+2);
 							refind[index]=csqrt((2*vf*CM+1)/(1-vf*CM));
 							break;
 						case EMT_BR:

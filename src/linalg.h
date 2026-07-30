@@ -63,7 +63,7 @@ void nMultSelf_conj(doublecomplex * restrict a,const double c);
 void nMultSelf_cmplx(doublecomplex * restrict a,const doublecomplex c);
 void MatrMultSelf_dip(doublecomplex * restrict a, doublecomplex * restrict c,bool trans);
 void nMult_mat(doublecomplex * restrict a,const doublecomplex * restrict b,doublecomplex (* restrict c)[3]);
-void MatrMult_dip(doublecomplex * restrict a,const doublecomplex * restrict b, doublecomplex * restrict c,bool trans);
+void MatrMult_dip(doublecomplex * restrict a,doublecomplex * restrict b, doublecomplex * restrict c,bool trans);
 void nMultSelf_mat(doublecomplex * restrict a,doublecomplex (* restrict c)[3]);
 void nConj(doublecomplex * restrict a);
 

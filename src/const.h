@@ -151,8 +151,10 @@ the compilation may fail or produce wrong results. If you still want to try, ena
 #define GFORM_DEBUG "%.2g"        // for debug and error output
 #define CFORM "%.10g%+.10gi"      // for complex numbers; may be defined in terms of GFORM
 #define CFORM_FULL "%.16g%+.16gi" // full-precision complex
+#define IFORM3U "%hu %hu %hu" //integer numbers
 	// derived formats; starting "" is to avoid redundant syntax errors in Eclipse
 #define GFORM3V "("GFORM","GFORM","GFORM")"
+#define GFORM2L ""GFORM" "GFORM
 #define GFORM3L ""GFORM" "GFORM" "GFORM
 #define GFORM4L ""GFORM" "GFORM" "GFORM" "GFORM
 #define GFORM5L ""GFORM" "GFORM" "GFORM" "GFORM" "GFORM
@@ -161,6 +163,7 @@ the compilation may fail or produce wrong results. If you still want to try, ena
 #define GFORM9L ""GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM
 #define GFORM10L ""GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM
 #define GFORM12L ""GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM
+#define GFORM18L ""GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM
 #define GFORM21L ""GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM" "GFORM
 #define GFORMDEF3V "("GFORMDEF","GFORMDEF","GFORMDEF")"
 #define CFORM3V "("CFORM","CFORM","CFORM")"
@@ -379,6 +382,7 @@ enum init_field { // how to calculate initial field to be used in the iterative 
 #define F_DIPPOL        "DipPol"
 #define F_BEAM          "IncBeam"
 #define F_GRANS         "granules"
+#define F_COORD        	"IntCoord"
 #define F_NORM        	"NormVec"
 #define F_VOLFRAC       "VolFrac"
 #define F_REFIND       	"RefIndex"
@@ -414,6 +418,7 @@ enum init_field { // how to calculate initial field to be used in the iterative 
 #define F_INTFLD_TMP    "f%d.tmp"
 #define F_DIPPOL_TMP    "p%d.tmp"
 #define F_GEOM_TMP      "g%d.tmp"
+#define F_COORD_TMP    	"c%d.tmp"
 #define F_NORM_TMP    	"n%d.tmp"
 #define F_VOLFRAC_TMP   "v%d.tmp"
 #define F_REFIND_TMP   	"r%d.tmp"

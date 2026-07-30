@@ -846,17 +846,16 @@ double AbsCross(void)
 // Calculate the Absorption cross-section for process 0
 {
 	size_t dip,index;
-	int i,j,nmat;
+	int i,j;
 	unsigned char mat;
 	double sum;
 	doublecomplex temp[3], tmp[3][3];
-	doublecomplex m,m2m1;
-	doublecomplex pol;
 	double mult[MAX_NMAT][3]; // multiplier (possibly anisotropic)
 	doublecomplex chi[3][3];
-	doublecomplex alpha[3][3], alphaT[3][3]; //Polarizability tensor α and its transpose
+	doublecomplex alpha[3][3]; //Polarizability tensor α
 	doublecomplex P[3]; //Polarization P of the voxel
 	doublecomplex beta[3][3], betaT[3][3]; //Square root of polarizability tensor and its transpose
+	double temp1 = 2*WaveNum*WaveNum*WaveNum/3;
 
 	/* In this function IGT_SO is equivalent to DRAINE. It may seem more logical to make IGT_SO same as FINDIP. However,
 	 * the result is different only for LDR (and similar), for which using IGT does not make a lot of sense anyway.
@@ -870,14 +869,13 @@ double AbsCross(void)
 			/* based on Eq.(35) from Yurkin and Hoekstra, "The discrete dipole approximation: an overview and recent
 			 * developments," JQSRT 106:558-589 (2007).
 			 * summand: Cabs=-4πk∑{Im[P*.(P\α)]+(2/3)k^3*|P|^2}*/
-			double temp1 = 2*WaveNum*WaveNum*WaveNum/3;
 			if(use_wd || use_ema){
 				for (dip=0,sum=0;dip<local_nvoid_Ndip;++dip){
 					//Computes Im[P*.(P\α)]=Im{P*.[P\(β'β)]}
 					for(i=0;i<3;i++) P[i]=pvec[3*dip+i];
 					MatrSet(beta,0);
-					if(volfrac[dip]<1.0) for (int i=0;i<3;i++) for (int j=0;j<3;j++) beta[i][j]=sqrtCC[9*dip+i+3*j];
-					else for (int j=0;j<3;j++) beta[j][j]=sqrtCC[9*dip];
+					if(volfrac[dip]<1.0) for (i=0;i<3;i++) for (j=0;j<3;j++) beta[i][j]=sqrtCC[9*dip+i+3*j];
+					else for (j=0;j<3;j++) beta[j][j]=sqrtCC[9*dip];
 					MatrTrans(betaT,beta);//β'=(β)'
 					MatrProd(3,betaT,beta,alpha); //α=β'.β
 					MatrInv(alpha,tmp); //α->1/α
@@ -904,8 +902,8 @@ double AbsCross(void)
 					for (i=0;i<3;i++) for (j=0;j<3;j++) tmp[i][j]=invchi[9*dip+i+3*j];
 					MatrVecMul(3,tmp,P,temp);
 					sum+=cimag(cDotProd(P,temp));
-					MatrMul(temp,dipvol);
-					MatrInv(temp,chi);
+					MatrMul(tmp,dipvol);
+					MatrInv(tmp,chi);
 				}
 			}else{
 				for (i=0;i<Nmat;i++) for (j=0;j<3;j++) mult[i][j]=-cimag(chi_inv[i][j]);

@@ -889,13 +889,14 @@ int CalculateE(const enum incpol which,const enum Eftype type)
 	if (store_dip_pol) StoreFields(which,pvec,NULL,F_DIPPOL,F_DIPPOL_TMP,"P","Dipole polarizations");
 	
 	#ifdef DEBUGFULL
-	if(use_wd || use_ema){
-		PrintVector(which,NULL,plSec,F_NORM,F_NORM_TMP,"n","Normal vectors");
-		PrintScalar(which,NULL,volfrac,F_VOLFRAC,F_VOLFRAC_TMP,"fp","Volume fractions");
-		PrintScalar(which,refind,NULL,F_REFIND,F_REFIND_TMP,"m","Refractive indices");
-		PrintTensor(which,invchi,NULL,F_INVCHI,F_INVCHI_TMP,"ξ","Inverse susceptibilities");
-		PrintTensor(which,sqrtCC,NULL,F_SQRTCC,F_SQRTCC_TMP,"β","Polarizability square roots");
-	}
+		// PrintVector(which,NULL,DipoleCoord,F_COORD,F_COORD_TMP,"r","Voxel relative coordinates");
+		PrintVector(which,NULL,plSec,F_NORM,F_NORM_TMP,"n","Vectors of plane coefficients");
+		PrintScalar(which,NULL,volfrac,F_VOLFRAC,F_VOLFRAC_TMP,"fp","Principal volume fractions");
+		PrintScalar(which,refind,NULL,F_REFIND,F_REFIND_TMP,"m","Relative refractive indices");
+		if(use_wd || use_ema){
+			PrintTensor(which,invchi,NULL,F_INVCHI,F_INVCHI_TMP,"ξ","Inverse susceptibility densities");
+			PrintTensor(which,sqrtCC,NULL,F_SQRTCC,F_SQRTCC_TMP,"β","Polarizability square roots");
+		}
 	#endif
 	return 0;
 }

@@ -2303,7 +2303,7 @@ void VariablesInterconnect(void)
 		if (anisotropy) PrintError("Weighted discretization/effective medium approximation does not support anisotropy for now");
 		if (rectDip) PrintError("Weighted discretization/effective medium approximation does not support cuboid voxels for now");
 		if (!(shape == SH_SPHERE || shape == SH_CYLINDER || shape == SH_BOX)) PrintErrorHelpSafe("Weighted discretization/effective medium approximation does not support '%s', allowed shapes are: sphere, cylinder and cube", shapename);
-		if (shape!=SH_SPHERE && curvcor) PrintError("Curvature correction currently works only for spheres");
+		if (shape==SH_READ && curvcor) PrintError("Curvature correction works only for regular shapes");
 		#if defined(SPARSE)
 		PrintError("Weighted discretization/effective medium approximation is not yet supported in sparse mode");
 		#endif

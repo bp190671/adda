@@ -1467,7 +1467,7 @@ static void InitFieldfromE(void)
             }
             MatrProd(3,sqrt_CC,inv_chi,tmp);
             MatrInv(tmp,temp);
-            for (int k=0;k<3;k++) for (int j=0;j<3;j++) multWD[9*dip+k+3*j]=temp[k][j];
+            for (k=0;k<3;k++) for (j=0;j<3;j++) multWD[9*dip+k+3*j]=temp[k][j];
         }
         MatrMultSelf_dip(xvec,multWD,true);
     }else{

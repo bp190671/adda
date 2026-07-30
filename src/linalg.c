@@ -576,7 +576,7 @@ void MatrMultSelf_dip(doublecomplex * restrict a, doublecomplex * restrict c,boo
 
 //======================================================================================================================
 
-void MatrMult_dip(doublecomplex * restrict a,const doublecomplex * restrict b, doublecomplex * restrict c,bool trans)
+void MatrMult_dip(doublecomplex * restrict a,doublecomplex * restrict b, doublecomplex * restrict c,bool trans)
 /* multiply by a function of material of dipole number; a[3*i+j]=c[i]*b[3*i+j]
  * !!! a,b,c must not alias !!!
  * It seems impossible to declare c as constant (due to two pointers)
